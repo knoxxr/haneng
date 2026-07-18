@@ -10,5 +10,12 @@ name = "haneng-settings"
 path = "src/main.rs"
 
 [dependencies]
-eframe = "0.35.0"
+# glow(OpenGL) 백엔드 고정 — 기본 wgpu 백엔드는 Windows에서 D3D12 의존성
+# (gpu-allocator ↔ windows 크레이트) 버전 충돌로 빌드가 깨진다.
+eframe = { version = "0.35.0", default-features = false, features = [
+    "default_fonts",
+    "glow",
+    "wayland",
+    "x11",
+] }
 haneng-core = { path = "../haneng-core" }
