@@ -22,7 +22,7 @@ jobs:
             script: ./scripts/package-macos.sh
             artifact: dist/haneng-macos.zip
           - os: windows-latest
-            script: powershell -File scripts/package-windows.ps1
+            script: pwsh -File scripts/package-windows.ps1
             artifact: dist/haneng-windows.zip
           - os: ubuntu-latest
             script: ./scripts/package-linux.sh
