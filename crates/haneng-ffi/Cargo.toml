@@ -1,0 +1,13 @@
+[package]
+name = "haneng-ffi"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "C ABI for haneng-core — consumed by the Fcitx5/IBus (Wayland) plugin track"
+
+[lib]
+name = "haneng"
+crate-type = ["cdylib", "staticlib", "rlib"]
+
+[dependencies]
+haneng-core = { path = "../haneng-core" }

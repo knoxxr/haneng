@@ -1,0 +1,13 @@
+[package]
+name = "haneng-cli"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "Command-line demo/dev tool for the haneng engine"
+
+[[bin]]
+name = "haneng"
+path = "src/main.rs"
+
+[dependencies]
+haneng-core = { path = "../haneng-core" }

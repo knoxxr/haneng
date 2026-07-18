@@ -1,0 +1,14 @@
+[package]
+name = "haneng-settings"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "Settings window for haneng (edits config.txt / exceptions.txt)"
+
+[[bin]]
+name = "haneng-settings"
+path = "src/main.rs"
+
+[dependencies]
+eframe = "0.35.0"
+haneng-core = { path = "../haneng-core" }

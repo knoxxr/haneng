@@ -1,0 +1,22 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/haneng-core",
+    "crates/haneng-cli",
+    "crates/haneng-datagen",
+    "crates/haneng-ffi",
+    "crates/haneng-linux",
+    "crates/haneng-macos",
+    "crates/haneng-settings",
+    "crates/haneng-windows",
+]
+
+[workspace.package]
+edition = "2021"
+license = "MIT"
+
+# 배포 바이너리: 작게, 디버그 심벌 제거.
+[profile.release]
+lto = true
+strip = true
+codegen-units = 1

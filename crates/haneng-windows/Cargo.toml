@@ -1,0 +1,20 @@
+[package]
+name = "haneng-windows"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "Windows adapter daemon for haneng (WH_KEYBOARD_LL hook + hotkey conversion)"
+
+[[bin]]
+name = "hanengw"
+path = "src/main.rs"
+
+[dependencies]
+haneng-core = { path = "../haneng-core" }
+
+[target.'cfg(windows)'.dependencies]
+tray-icon = "0.24.1"
+
+[target.'cfg(windows)'.dependencies.windows-sys]
+version = "0.60"
+features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_Input_Ime", "Win32_System_Threading"]
