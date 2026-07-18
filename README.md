@@ -37,17 +37,19 @@ haneng은 한글/영문 입력 모드를 착각하고 친 텍스트를 감지해
 
 ## 설치 / 실행
 
-릴리스 바이너리가 없다면 소스에서 빌드합니다 (Rust 필요):
+**[📦 최신 릴리스 다운로드](https://github.com/knoxxr/haneng/releases/latest)**
+
+| OS | 파일 | 비고 |
+|---|---|---|
+| macOS 13+ | `haneng-macos.zip` | 압축 해제 후 haneng.app 실행. 시스템 설정 → 개인정보 보호 및 보안 → **손쉬운 사용 + 입력 모니터링** 권한 필요. 서명이 없어 첫 실행은 우클릭 → 열기 |
+| Windows | `haneng-windows.zip` | `hanengw.exe` 실행 (SmartScreen 경고 시 "추가 정보 → 실행"). 관리자 권한 앱에는 훅이 닿지 않음 |
+| Linux (X11) | `haneng-linux-x11.tar.gz` | `hanengl` 실행. 시작 모드를 영문으로 가정하고 한/영 키를 관찰해 추적. Wayland는 미지원 (Fcitx5/IBus 플러그인 트랙 진행 중) |
+
+소스 빌드 (Rust 필요):
 
 ```sh
-cargo build --release
+cargo build --release   # target/release/{hanengd|hanengw|hanengl}, haneng-settings
 ```
-
-| OS | 데몬 | 비고 |
-|---|---|---|
-| macOS | `target/release/hanengd` | 시스템 설정 → 개인정보 보호 및 보안 → **손쉬운 사용 + 입력 모니터링** 권한 필요. `scripts/package-macos.sh`로 .app 번들 생성 가능 |
-| Windows | `target/release/hanengw.exe` | 관리자 권한 앱에는 훅이 닿지 않음 |
-| Linux (X11) | `target/release/hanengl` | 시작 모드를 영문으로 가정하고 한/영 키를 관찰해 추적. Wayland는 미지원 (Fcitx5/IBus 플러그인 트랙 진행 중) |
 
 설정은 트레이 메뉴 → "설정..." 또는 `haneng-settings` 실행. 설정 파일 위치:
 macOS `~/Library/Application Support/haneng/`, Windows `%APPDATA%\haneng\`,
