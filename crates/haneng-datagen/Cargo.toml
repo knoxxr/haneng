@@ -1,6 +1,6 @@
 [package]
 name = "haneng-datagen"
-version = "0.1.0"
+version.workspace = true
 edition.workspace = true
 license.workspace = true
 description = "Dev tool: generates haneng-core/src/lexicon_data.rs from frequency word lists"

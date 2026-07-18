@@ -72,6 +72,19 @@ cargo run -q -p haneng-cli -- "gksrmf dlqfur"   # 엔진 CLI 데모 → "한글 
 아키텍처와 개발 규약은 [CLAUDE.md](CLAUDE.md), 전체 계획은 [PLAN.md](PLAN.md),
 서드파티 데이터 출처는 [NOTICE.md](NOTICE.md) 참고.
 
+## 버전 관리 / 릴리스
+
+- 버전은 [SemVer](https://semver.org/lang/ko/)를 따르고, 루트 `Cargo.toml`의
+  `[workspace.package] version`이 **모든 크레이트가 공유하는 단일 출처**입니다.
+- 변경 이력은 [CHANGELOG.md](CHANGELOG.md)에 기록합니다 (Keep a Changelog 포맷).
+  개발 중에는 `[Unreleased]` 섹션에 쌓습니다.
+- 릴리스 절차:
+
+  ```sh
+  scripts/release.sh 0.2.0        # 버전 올림 + CHANGELOG 확정 + 테스트 + 커밋 + 태그
+  git push origin main --tags     # → CI가 3개 OS 패키지를 드래프트 릴리스에 첨부
+  ```
+
 ## 라이선스
 
 MIT — [LICENSE](LICENSE)

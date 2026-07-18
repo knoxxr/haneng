@@ -1,6 +1,6 @@
 [package]
 name = "haneng-ffi"
-version = "0.1.0"
+version.workspace = true
 edition.workspace = true
 license.workspace = true
 description = "C ABI for haneng-core — consumed by the Fcitx5/IBus (Wayland) plugin track"

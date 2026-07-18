@@ -1,0 +1,30 @@
+# Changelog
+
+포맷: [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/),
+버전: [SemVer](https://semver.org/lang/ko/). 릴리스 절차는 `scripts/release.sh` 참고.
+
+## [Unreleased]
+
+## [0.1.0] - 2026-07-18
+
+첫 릴리스.
+
+### Added
+- 코어 엔진: 두벌식 오토마타(도깨비불 포함) 기반 한↔영 양방향 변환,
+  세벌식 390/최종 자판(libhangul 데이터 기반) 지원
+- 잘못된 입력 모드 감지기: 구조 게이트 + 사전(영 1만/한 2만) + bigram
+  음성 필터, 민감도 3단계 — 실측 오발동 0건 / recall 98~99% (Balanced)
+- 단어 경계 자동 교정 + 백스페이스 1회 되돌리기(undo) + 예외 사전 학습·영속화
+- 수동 변환 핫키 (macOS ⌘⇧Space, Windows/Linux Ctrl+Shift+Space) — 재입력 시 토글
+- 상주 데몬: macOS(`hanengd`, CGEventTap), Windows(`hanengw`, WH_KEYBOARD_LL),
+  Linux X11(`hanengl`, XRecord/XTest)
+- 보안: 비밀번호 필드 차단(macOS 보안 입력·Windows ES_PASSWORD),
+  주입 이벤트 마커, 키 입력 미기록(메모리에 마지막 1~2 단어만)
+- 트레이(메뉴바) 토글, 설정 창(`haneng-settings`), 앱별 비활성화(`disabled_apps`)
+- C FFI(`libhaneng` + `haneng.h`) — Wayland용 Fcitx5/IBus 플러그인 트랙 기반
+- CI(3개 OS 테스트·린트) 및 태그 릴리스 파이프라인, OS별 패키징 스크립트
+
+### 알려진 한계
+- Linux: 비밀번호 필드 감지 없음(AT-SPI 예정), IME 모드는 한/영 키 관찰로 추적
+- Wayland 미지원 (Fcitx5/IBus 플러그인 트랙 진행 중)
+- 실기기 검증 전 (3개 OS 모두)

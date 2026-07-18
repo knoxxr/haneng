@@ -1,6 +1,6 @@
 [package]
 name = "haneng-settings"
-version = "0.1.0"
+version.workspace = true
 edition.workspace = true
 license.workspace = true
 description = "Settings window for haneng (edits config.txt / exceptions.txt)"

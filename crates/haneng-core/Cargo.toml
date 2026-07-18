@@ -1,6 +1,6 @@
 [package]
 name = "haneng-core"
-version = "0.1.0"
+version.workspace = true
 edition.workspace = true
 license.workspace = true
 description = "Core engine for haneng: dubeolsik Korean/English wrong-mode detection and conversion"

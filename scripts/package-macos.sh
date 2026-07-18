@@ -13,7 +13,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-VERSION=$(grep -m1 '^version' crates/haneng-macos/Cargo.toml | cut -d'"' -f2)
+# 워크스페이스 공유 버전 (루트 Cargo.toml이 단일 출처).
+VERSION=$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2)
 APP=dist/haneng.app
 
 cargo build --release -p haneng-macos -p haneng-settings
