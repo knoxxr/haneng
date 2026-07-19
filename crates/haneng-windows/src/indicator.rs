@@ -90,7 +90,10 @@ pub fn set_mode(korean: bool) {
 }
 
 /// LL 마우스 훅의 이동 이벤트에서 호출 — 반드시 가볍게.
-pub fn on_mouse_move() {
+/// `current_mode`는 배지를 실제로 표시/갱신할 때만 호출된다 (I-빔 위 +
+/// 스로틀 통과 시 최대 20회/초) — IME 실시간 질의처럼 다소 무거운
+/// 소스를 넘겨도 된다.
+pub fn on_mouse_move(current_mode: impl FnOnce() -> bool) {
     let hwnd = INDICATOR_HWND.load(Ordering::Acquire) as HWND;
     if hwnd.is_null() {
         return;
@@ -111,6 +114,8 @@ pub fn on_mouse_move() {
         let over_text = info.flags == CURSOR_SHOWING
             && info.hCursor as usize == IBEAM_CURSOR.load(Ordering::Relaxed);
         if over_text {
+            let mode = current_mode();
+            let mode_changed = KOREAN.swap(mode, Ordering::Relaxed) != mode;
             let first_show = !VISIBLE.swap(true, Ordering::Relaxed);
             SetWindowPos(
                 hwnd,
@@ -121,7 +126,7 @@ pub fn on_mouse_move() {
                 0,
                 SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW,
             );
-            if first_show {
+            if first_show || mode_changed {
                 InvalidateRect(hwnd, std::ptr::null(), 1);
             }
         } else if VISIBLE.swap(false, Ordering::Relaxed) {

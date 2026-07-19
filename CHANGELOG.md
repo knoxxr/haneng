@@ -5,6 +5,13 @@
 
 ## [Unreleased]
 
+### Fixed
+- Windows: 한/영 배지가 반대로 표시되던 문제 — 초기 모드 추정이 어긋나면
+  한/영 키를 눌러도 반대 상태가 유지되는 구조였다. 배지 표시·변환 시점에
+  포커스 창 IME 열림 상태(IMC_GETOPENSTATUS)를 실시간 질의(50ms 타임아웃)
+  해 진실값으로 쓰고 추적치를 재동기화한다. 질의에 응답하지 않는 환경용
+  설정: `initial_mode = korean|english`, `ime_query = off`.
+
 ## [0.3.1] - 2026-07-19
 
 ### Fixed

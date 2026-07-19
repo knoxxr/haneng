@@ -18,8 +18,8 @@ pub const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 /// 기본 설정은 여전히 rustls를 찾는다 — 명시하지 않으면 https 요청이
 /// 런타임에 실패(패닉)해 확인 스피너가 영원히 남는 버그가 된다.
 fn agent() -> ureq::Agent {
-    let builder = ureq::Agent::config_builder()
-        .timeout_global(Some(std::time::Duration::from_secs(15)));
+    let builder =
+        ureq::Agent::config_builder().timeout_global(Some(std::time::Duration::from_secs(15)));
     #[cfg(windows)]
     let builder = builder.tls_config(
         ureq::tls::TlsConfig::builder()
@@ -153,7 +153,10 @@ mod tests {
         let result = check();
         println!("check() = {result:?} (current v{CURRENT_VERSION})");
         assert!(
-            !matches!(result, UpdateState::Error(_) | UpdateState::Checking | UpdateState::Idle),
+            !matches!(
+                result,
+                UpdateState::Error(_) | UpdateState::Checking | UpdateState::Idle
+            ),
             "실제 조회가 실패: {result:?}"
         );
     }

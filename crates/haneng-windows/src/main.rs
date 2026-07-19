@@ -84,9 +84,28 @@ mod win {
         unsafe { GetAsyncKeyState(vk as i32) as u16 & 0x8000 != 0 }
     }
 
+    /// 현재 한/영 모드. 가능하면 포커스 창 IME에 실시간 질의해 추적치를
+    /// 재동기화하고, 응답이 없는 환경에서만 키 관찰 추적치를 쓴다.
+    /// (`ime_query = off`로 질의를 끌 수 있다.)
+    fn current_korean_mode() -> bool {
+        if CONFIG.extra("ime_query") != Some("off") {
+            if let Some(korean) = ime::query_korean_mode() {
+                KOREAN_MODE.store(korean, Ordering::Relaxed);
+                return korean;
+            }
+        }
+        KOREAN_MODE.load(Ordering::Relaxed)
+    }
+
     pub fn run() {
         LazyLock::force(&CONFIG);
-        KOREAN_MODE.store(ime::korean_mode(), Ordering::Relaxed);
+        let initial =
+            ime::query_korean_mode().unwrap_or_else(|| match CONFIG.extra("initial_mode") {
+                Some("korean") => true,
+                Some("english") => false,
+                _ => ime::korean_mode(),
+            });
+        KOREAN_MODE.store(initial, Ordering::Relaxed);
         // 입력창 위 한/영 배지 (config: hover_indicator = off 로 끔).
         if CONFIG.extra("hover_indicator") != Some("off") {
             indicator::init();
@@ -132,7 +151,7 @@ mod win {
         if code >= 0 {
             let message = wparam as u32;
             if message == WM_MOUSEMOVE {
-                indicator::on_mouse_move();
+                indicator::on_mouse_move(current_korean_mode);
             } else if matches!(message, WM_LBUTTONDOWN | WM_RBUTTONDOWN | WM_MBUTTONDOWN) {
                 // 클릭은 포커스/커서 이동일 수 있다 → 추적 포기.
                 BUFFER.lock().unwrap().clear();
@@ -197,7 +216,7 @@ mod win {
             if secure::password_field_focused() || foreground_app_disabled() {
                 return;
             }
-            let korean_mode = KOREAN_MODE.load(Ordering::Relaxed);
+            let korean_mode = current_korean_mode();
             let replacement = {
                 let mut buf = BUFFER.lock().unwrap();
                 let Some(Target::Committed(keys, _boundary)) = buf.target() else {
