@@ -36,7 +36,7 @@ if ($candle) {
     candle.exe -nologo -arch x64 "-dVersion=$version" "-dDist=dist" `
         -out dist\haneng.wixobj scripts\haneng.wxs
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-    light.exe -nologo -sice:ICE61 dist\haneng.wixobj -out dist\haneng-windows.msi
+    light.exe -nologo -spdb -sice:ICE61 dist\haneng.wixobj -out dist\haneng-windows.msi
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     Write-Host "done: dist\haneng-windows.msi (v$version)"
 } else {
