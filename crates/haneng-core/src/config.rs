@@ -94,6 +94,14 @@ impl Config {
             .map(|(_, v)| v.as_str())
     }
 
+    /// 어댑터 전용 설정 키 쓰기 (빈 값은 키 제거).
+    pub fn set_extra(&mut self, key: &str, value: &str) {
+        self.extras.retain(|(k, _)| k != key);
+        if !value.is_empty() {
+            self.extras.push((key.to_string(), value.to_string()));
+        }
+    }
+
     /// 이 앱에서 교정을 꺼야 하는가 (대소문자 무시 부분 일치).
     pub fn app_disabled(&self, app_name: &str) -> bool {
         let name = app_name.to_lowercase();

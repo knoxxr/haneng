@@ -40,10 +40,9 @@ fn open_settings() {
 }
 
 /// 트레이 설치. 반환된 TrayIcon은 메시지 루프가 도는 동안 보유해야 한다.
-/// (Windows는 수동 변환 전용이라 자동 교정 토글이 없다.)
 pub fn install(enabled: &'static AtomicBool) -> TrayIcon {
     let toggle_enabled = CheckMenuItem::new(
-        "한/영 변환 활성화",
+        "한/영 배지 표시",
         true,
         enabled.load(Ordering::Relaxed),
         None,
@@ -85,7 +84,7 @@ pub fn install(enabled: &'static AtomicBool) -> TrayIcon {
     TrayIconBuilder::new()
         .with_menu(Box::new(menu))
         .with_icon(solid_icon())
-        .with_tooltip("haneng — 한/영 오타 변환 (Ctrl+Shift+Space)")
+        .with_tooltip("haneng — 한/영 상태 표시기")
         .build()
         .expect("create tray icon")
 }

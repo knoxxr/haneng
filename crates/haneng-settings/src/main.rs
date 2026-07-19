@@ -1,8 +1,8 @@
 //! haneng-settings — 설정 창 (eframe/egui).
 //!
-//! `config.txt`와 `exceptions.txt`를 편집한다. 데몬은 시작 시에만 설정을
-//! 읽으므로, 저장 후 데몬을 재시작해야 적용된다 (창에도 안내 표시).
-//! 실시간 토글(활성화/자동)은 데몬 트레이 메뉴가 담당한다.
+//! 한/영 상태 표시기의 `config.txt`를 편집하고 업데이트를 확인·설치한다.
+//! 데몬은 시작 시에만 설정을 읽으므로, 저장 후 데몬을 재시작해야 적용된다.
+//! 실시간 배지 토글은 데몬 트레이 메뉴가 담당한다.
 //!
 //! egui 기본 폰트에는 한글이 없어 OS 시스템 폰트를 찾아 싣는다.
 
@@ -10,14 +10,14 @@
 
 mod update;
 
-use haneng_core::{config, Config, Layout, Sensitivity};
+use haneng_core::{config, Config};
 use std::sync::{Arc, Mutex};
 use update::UpdateState;
 
 fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
-            .with_inner_size([460.0, 560.0])
+            .with_inner_size([420.0, 320.0])
             .with_title("haneng 설정"),
         ..Default::default()
     };
@@ -66,9 +66,9 @@ fn install_korean_font(ctx: &eframe::egui::Context) {
 
 struct SettingsApp {
     config: Config,
-    disabled_apps_text: String,
-    exceptions: Vec<String>,
-    new_exception: String,
+    show_badge: bool,
+    /// 질의 무응답 환경의 시작 모드: None=자동, Some(true)=한글, Some(false)=영문.
+    initial_mode: Option<bool>,
     status: String,
     update: Arc<Mutex<UpdateState>>,
 }
@@ -76,12 +76,16 @@ struct SettingsApp {
 impl SettingsApp {
     fn load() -> Self {
         let config = config::load_config();
-        let disabled_apps_text = config.disabled_apps.join(", ");
+        let show_badge = config.extra("hover_indicator") != Some("off");
+        let initial_mode = match config.extra("initial_mode") {
+            Some("korean") => Some(true),
+            Some("english") => Some(false),
+            _ => None,
+        };
         Self {
             config,
-            disabled_apps_text,
-            exceptions: config::load_exceptions(),
-            new_exception: String::new(),
+            show_badge,
+            initial_mode,
             status: String::new(),
             update: Arc::new(Mutex::new(UpdateState::Idle)),
         }
@@ -118,14 +122,17 @@ impl SettingsApp {
     }
 
     fn save(&mut self) {
-        self.config.disabled_apps = self
-            .disabled_apps_text
-            .split(',')
-            .map(|s| s.trim().to_lowercase())
-            .filter(|s| !s.is_empty())
-            .collect();
-        let result = config::save_config(&self.config)
-            .and_then(|()| config::save_exceptions(&self.exceptions));
+        self.config
+            .set_extra("hover_indicator", if self.show_badge { "" } else { "off" });
+        self.config.set_extra(
+            "initial_mode",
+            match self.initial_mode {
+                None => "",
+                Some(true) => "korean",
+                Some(false) => "english",
+            },
+        );
+        let result = config::save_config(&self.config);
         self.status = match result {
             Ok(()) => format!(
                 "저장됨: {} — 데몬을 재시작하면 적용됩니다.",
@@ -140,73 +147,19 @@ impl SettingsApp {
 
 impl eframe::App for SettingsApp {
     fn ui(&mut self, ui: &mut eframe::egui::Ui, _frame: &mut eframe::Frame) {
-        use eframe::egui;
         {
-            ui.heading("haneng — 한/영 오타 교정 설정");
-            ui.add_space(8.0);
-
-            ui.checkbox(&mut self.config.auto, "단어 경계 자동 교정 (시작 기본값)");
-            ui.add_space(8.0);
-
-            ui.label("자동 교정 민감도");
-            ui.horizontal(|ui| {
-                for (value, label) in [
-                    (Sensitivity::Conservative, "보수적"),
-                    (Sensitivity::Balanced, "균형 (권장)"),
-                    (Sensitivity::Aggressive, "적극적"),
-                ] {
-                    ui.radio_value(&mut self.config.sensitivity, value, label);
-                }
-            });
-            ui.add_space(8.0);
-
-            ui.label("한글 자판 배열");
-            ui.horizontal(|ui| {
-                for (value, label) in [
-                    (Layout::Dubeolsik, "두벌식"),
-                    (Layout::Sebeolsik390, "세벌식 390"),
-                    (Layout::SebeolsikFinal, "세벌식 최종"),
-                ] {
-                    ui.radio_value(&mut self.config.layout, value, label);
-                }
-            });
-            ui.add_space(8.0);
-
-            ui.label("교정을 끌 앱 (쉼표로 구분, 이름 일부만 써도 됨)");
-            ui.text_edit_singleline(&mut self.disabled_apps_text);
+            ui.heading("haneng — 한/영 상태 표시기");
+            ui.small("입력창 위에 마우스를 올리면 현재 한/영 모드를 표시합니다.");
             ui.add_space(12.0);
 
-            ui.separator();
-            ui.label(format!(
-                "예외 사전 — 자동 변환하지 않는 단어 ({}개)",
-                self.exceptions.len()
-            ));
-            ui.small("자동 교정을 백스페이스로 되돌리면 자동으로 학습됩니다.");
-            egui::ScrollArea::vertical()
-                .max_height(160.0)
-                .show(ui, |ui| {
-                    let mut remove: Option<usize> = None;
-                    for (i, word) in self.exceptions.iter().enumerate() {
-                        ui.horizontal(|ui| {
-                            if ui.small_button("삭제").clicked() {
-                                remove = Some(i);
-                            }
-                            ui.label(word);
-                        });
-                    }
-                    if let Some(i) = remove {
-                        self.exceptions.remove(i);
-                    }
-                });
+            ui.checkbox(&mut self.show_badge, "한/영 배지 표시 (시작 기본값)");
+            ui.add_space(8.0);
+
+            ui.label("IME가 상태 조회에 응답하지 않을 때의 시작 모드");
             ui.horizontal(|ui| {
-                ui.text_edit_singleline(&mut self.new_exception);
-                if ui.button("추가").clicked() {
-                    let word = self.new_exception.trim().to_string();
-                    if !word.is_empty() && !self.exceptions.contains(&word) {
-                        self.exceptions.push(word);
-                    }
-                    self.new_exception.clear();
-                }
+                ui.radio_value(&mut self.initial_mode, None, "자동");
+                ui.radio_value(&mut self.initial_mode, Some(true), "한글");
+                ui.radio_value(&mut self.initial_mode, Some(false), "영문");
             });
             ui.add_space(12.0);
 

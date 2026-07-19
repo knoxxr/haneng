@@ -1,4 +1,4 @@
-# v* 태그 푸시 시 3개 OS 패키지를 빌드해 GitHub Release에 첨부한다.
+# v* 태그 푸시 시 Windows 패키지(MSI/zip)를 빌드해 GitHub Release에 첨부한다.
 #
 # 코드 서명은 인증서 시크릿이 준비되면 활성화:
 # - macOS: SIGN_IDENTITY + 키체인 임포트 단계 추가, notarytool 공증
@@ -14,20 +14,7 @@ permissions:
 
 jobs:
   package:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: macos-latest
-            script: ./scripts/package-macos.sh
-            artifact: dist/haneng-macos.zip
-          - os: windows-latest
-            script: pwsh -File scripts/package-windows.ps1
-            artifact: dist/haneng-windows.*
-          - os: ubuntu-latest
-            script: ./scripts/package-linux.sh
-            artifact: dist/haneng-linux-x11.tar.gz
-    runs-on: ${{ matrix.os }}
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -37,10 +24,10 @@ jobs:
         run: cargo test --workspace
 
       - name: Package
-        run: ${{ matrix.script }}
+        run: pwsh -File scripts/package-windows.ps1
 
       - name: Attach to release
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ matrix.artifact }}
+          files: dist/haneng-windows.*
           draft: true
