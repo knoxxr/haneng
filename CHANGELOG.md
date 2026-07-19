@@ -5,6 +5,8 @@
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-07-20
+
 ### Added
 - **macOS 버전** (`hanengd`, .app 번들): 입력창 위 한/영 상태 배지.
   텍스트 영역은 Accessibility(요소 role), 한/영은 입력 소스(TIS)로 판별.
