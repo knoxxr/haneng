@@ -13,8 +13,7 @@ use tray_icon::menu::{CheckMenuItem, Menu, MenuEvent, MenuId, MenuItem, Predefin
 use tray_icon::{Icon, TrayIcon, TrayIconBuilder};
 
 thread_local! {
-    static CHECK_ITEMS: RefCell<Option<(CheckMenuItem, CheckMenuItem)>> =
-        const { RefCell::new(None) };
+    static CHECK_ITEMS: RefCell<Option<CheckMenuItem>> = const { RefCell::new(None) };
 }
 
 /// 단색 16×16 아이콘 (에셋 없이 생성).
@@ -41,17 +40,12 @@ fn open_settings() {
 }
 
 /// 트레이 설치. 반환된 TrayIcon은 메시지 루프가 도는 동안 보유해야 한다.
-pub fn install(enabled: &'static AtomicBool, auto: &'static AtomicBool) -> TrayIcon {
+/// (Windows는 수동 변환 전용이라 자동 교정 토글이 없다.)
+pub fn install(enabled: &'static AtomicBool) -> TrayIcon {
     let toggle_enabled = CheckMenuItem::new(
-        "한/영 교정 활성화",
+        "한/영 변환 활성화",
         true,
         enabled.load(Ordering::Relaxed),
-        None,
-    );
-    let toggle_auto = CheckMenuItem::new(
-        "단어 경계 자동 교정",
-        true,
-        auto.load(Ordering::Relaxed),
         None,
     );
     let settings = MenuItem::new("설정...", true, None);
@@ -59,41 +53,31 @@ pub fn install(enabled: &'static AtomicBool, auto: &'static AtomicBool) -> TrayI
     let menu = Menu::new();
     menu.append_items(&[
         &toggle_enabled,
-        &toggle_auto,
         &PredefinedMenuItem::separator(),
         &settings,
         &quit,
     ])
     .expect("append tray menu items");
 
-    let ids: (MenuId, MenuId, MenuId, MenuId) = (
+    let ids: (MenuId, MenuId, MenuId) = (
         toggle_enabled.id().clone(),
-        toggle_auto.id().clone(),
         settings.id().clone(),
         quit.id().clone(),
     );
-    CHECK_ITEMS.with(|cell| *cell.borrow_mut() = Some((toggle_enabled, toggle_auto)));
+    CHECK_ITEMS.with(|cell| *cell.borrow_mut() = Some(toggle_enabled));
 
     MenuEvent::set_event_handler(Some(move |event: MenuEvent| {
         if event.id == ids.0 {
             let now = !enabled.load(Ordering::Relaxed);
             enabled.store(now, Ordering::Relaxed);
             CHECK_ITEMS.with(|cell| {
-                if let Some((item, _)) = cell.borrow().as_ref() {
+                if let Some(item) = cell.borrow().as_ref() {
                     item.set_checked(now);
                 }
             });
         } else if event.id == ids.1 {
-            let now = !auto.load(Ordering::Relaxed);
-            auto.store(now, Ordering::Relaxed);
-            CHECK_ITEMS.with(|cell| {
-                if let Some((_, item)) = cell.borrow().as_ref() {
-                    item.set_checked(now);
-                }
-            });
-        } else if event.id == ids.2 {
             open_settings();
-        } else if event.id == ids.3 {
+        } else if event.id == ids.2 {
             std::process::exit(0);
         }
     }));
@@ -101,7 +85,7 @@ pub fn install(enabled: &'static AtomicBool, auto: &'static AtomicBool) -> TrayI
     TrayIconBuilder::new()
         .with_menu(Box::new(menu))
         .with_icon(solid_icon())
-        .with_tooltip("haneng — 한/영 오타 교정 (Ctrl+Shift+Space)")
+        .with_tooltip("haneng — 한/영 오타 변환 (Ctrl+Shift+Space)")
         .build()
         .expect("create tray icon")
 }

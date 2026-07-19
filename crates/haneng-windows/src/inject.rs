@@ -8,7 +8,6 @@ use std::thread::sleep;
 use std::time::Duration;
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
     SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, KEYEVENTF_UNICODE,
-    VK_BACK,
 };
 
 /// "HAEN" — 주입 이벤트 식별자 (KBDLLHOOKSTRUCT.dwExtraInfo로 확인).
@@ -39,14 +38,38 @@ fn send(input: &INPUT) {
     sleep(EVENT_GAP);
 }
 
-/// 백스페이스 `backspaces`회 후 `text`를 타이핑한다.
-pub fn replace_text(backspaces: usize, text: &str) {
-    for _ in 0..backspaces {
-        send(&key_input(VK_BACK, 0, 0));
-        send(&key_input(VK_BACK, 0, KEYEVENTF_KEYUP));
-    }
+/// 유니코드 텍스트 타이핑 (IME를 우회해 그대로 삽입된다).
+pub fn type_text(text: &str) {
     for unit in text.encode_utf16() {
         send(&key_input(0, unit, KEYEVENTF_UNICODE));
         send(&key_input(0, unit, KEYEVENTF_UNICODE | KEYEVENTF_KEYUP));
     }
+}
+
+const VK_SHIFT: u16 = 0x10;
+const VK_CONTROL: u16 = 0x11;
+const VK_HANGUL: u16 = 0x15;
+const VK_LEFT: u16 = 0x25;
+
+/// Ctrl+Shift+Left — 커서 앞의 단어(뒤따르는 공백 포함)를 선택한다.
+/// 백스페이스 개수 계산 없이 선택 위에 타이핑하는 치환의 기반:
+/// 몇 번을 실행해도 선택 범위 밖 텍스트는 지워지지 않는다.
+pub fn select_previous_word() {
+    for (vk, flags) in [
+        (VK_CONTROL, 0),
+        (VK_SHIFT, 0),
+        (VK_LEFT, 0),
+        (VK_LEFT, KEYEVENTF_KEYUP),
+        (VK_SHIFT, KEYEVENTF_KEYUP),
+        (VK_CONTROL, KEYEVENTF_KEYUP),
+    ] {
+        send(&key_input(vk, 0, flags));
+    }
+}
+
+/// 한/영 키를 흉내 내 IME 모드를 전환한다 — Win11 신형 한글 IME에서도
+/// 동작하는 유일하게 신뢰할 수 있는 전환 방법.
+pub fn press_hangul_toggle() {
+    send(&key_input(VK_HANGUL, 0, 0));
+    send(&key_input(VK_HANGUL, 0, KEYEVENTF_KEYUP));
 }

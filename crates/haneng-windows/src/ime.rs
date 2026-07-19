@@ -11,7 +11,6 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
 };
 
 const IMC_GETCONVERSIONMODE: usize = 0x0001;
-const IMC_SETCONVERSIONMODE: usize = 0x0002;
 /// IME_CMODE_NATIVE — 한글 입력 모드 비트.
 const CMODE_NATIVE: isize = 0x0001;
 
@@ -31,20 +30,4 @@ pub fn korean_mode() -> bool {
         return false;
     }
     unsafe { SendMessageW(ime, WM_IME_CONTROL, IMC_GETCONVERSIONMODE, 0) & CMODE_NATIVE != 0 }
-}
-
-pub fn set_korean_mode(korean: bool) {
-    let ime = ime_window();
-    if ime.is_null() {
-        return;
-    }
-    unsafe {
-        let mode = SendMessageW(ime, WM_IME_CONTROL, IMC_GETCONVERSIONMODE, 0);
-        let new_mode = if korean {
-            mode | CMODE_NATIVE
-        } else {
-            mode & !CMODE_NATIVE
-        };
-        SendMessageW(ime, WM_IME_CONTROL, IMC_SETCONVERSIONMODE, new_mode);
-    }
 }
