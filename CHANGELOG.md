@@ -5,6 +5,16 @@
 
 ## [Unreleased]
 
+### Added
+- **macOS 버전** (`hanengd`, .app 번들): 입력창 위 한/영 상태 배지.
+  텍스트 영역은 Accessibility(요소 role), 한/영은 입력 소스(TIS)로 판별.
+  메뉴바 아이콘(배지 토글·설정·종료), 손쉬운 사용 권한 필요.
+- **Linux(X11) 버전** (`hanengl`, 실험적): 입력창 위 배지. 텍스트 영역은
+  XFixes 커서 이름, Caps는 포인터 Lock 마스크, 한/영은 한/영 토글 키
+  관찰(XRecord)로 추적. Wayland 미지원, 실기기 검증 전.
+- 릴리스 파이프라인이 다시 3개 OS 패키지(Windows MSI/zip, macOS zip,
+  Linux tar.gz)를 빌드한다.
+
 ## [0.4.2] - 2026-07-19
 
 ### Added
