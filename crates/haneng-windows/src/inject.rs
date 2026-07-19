@@ -49,11 +49,20 @@ pub fn type_text(text: &str) {
 const VK_SHIFT: u16 = 0x10;
 const VK_CONTROL: u16 = 0x11;
 const VK_HANGUL: u16 = 0x15;
-const VK_LEFT: u16 = 0x25;
+pub const VK_LEFT: u16 = 0x25;
+pub const VK_RIGHT: u16 = 0x27;
 
-/// Ctrl+Shift+Left — 커서 앞의 단어(뒤따르는 공백 포함)를 선택한다.
+/// 단일 키 탭 (down+up).
+pub fn tap_key(vk: u16) {
+    send(&key_input(vk, 0, 0));
+    send(&key_input(vk, 0, KEYEVENTF_KEYUP));
+}
+
+/// Ctrl+Shift+Left — 커서 바로 앞의 단어를 선택한다.
 /// 백스페이스 개수 계산 없이 선택 위에 타이핑하는 치환의 기반:
 /// 몇 번을 실행해도 선택 범위 밖 텍스트는 지워지지 않는다.
+/// 호출 전 커서가 단어 끝 글자 바로 뒤에 있어야 한다 (공백 뒤가 아니라)
+/// — 공백 뒤에서 부르면 앱에 따라 선택이 줄바꿈을 넘어갈 수 있다.
 pub fn select_previous_word() {
     for (vk, flags) in [
         (VK_CONTROL, 0),

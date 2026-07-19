@@ -111,8 +111,11 @@ mod win {
             if kb.dwExtraInfo != INJECT_MARKER
                 && (message == WM_KEYDOWN || message == WM_SYSKEYDOWN)
                 && ENABLED.load(Ordering::Relaxed)
+                && on_key_down(kb.vkCode as u16)
             {
-                on_key_down(kb.vkCode as u16);
+                // 핫키는 여기서 소비한다 — 앱까지 전달되면 공백 삽입이나
+                // Shift+Space 한/영 토글 등 부작용을 일으킨다.
+                return 1;
             }
         }
         CallNextHookEx(std::ptr::null_mut(), code, wparam, lparam)
@@ -129,11 +132,12 @@ mod win {
         CallNextHookEx(std::ptr::null_mut(), code, wparam, lparam)
     }
 
-    fn on_key_down(vk: u16) {
+    /// true = 이 키(핫키)를 소비해야 한다.
+    fn on_key_down(vk: u16) -> bool {
         // 한/영 키 관찰 → 모드 추적. (주입 이벤트는 마커로 걸러졌다)
         if vk == VK_HANGUL_KEY {
             KOREAN_MODE.fetch_xor(true, Ordering::Relaxed);
-            return;
+            return false;
         }
         let ctrl = key_down(VK_CONTROL);
         let shift = key_down(VK_SHIFT);
@@ -141,18 +145,19 @@ mod win {
         let win = key_down(VK_LWIN) || key_down(VK_RWIN);
         // 모디파이어 키 자체의 KeyDown은 아무 상태도 바꾸지 않는다.
         let Some(class) = classify(vk, shift) else {
-            return;
+            return false;
         };
         if vk == VK_SPACE && ctrl && shift && !alt && !win {
             trigger_manual_conversion();
-            return;
+            return true;
         }
         if ctrl || alt || win {
             // 단축키 입력은 타이핑이 아니다.
             BUFFER.lock().unwrap().clear();
-            return;
+            return false;
         }
         BUFFER.lock().unwrap().feed(class);
+        false
     }
 
     /// Ctrl/Shift가 물리적으로 떼어질 때까지 대기. 시간 안에 떼어지지
@@ -185,28 +190,32 @@ mod win {
             let korean_mode = KOREAN_MODE.load(Ordering::Relaxed);
             let replacement = {
                 let mut buf = BUFFER.lock().unwrap();
-                let Some(Target::Committed(keys, boundary)) = buf.target() else {
+                let Some(Target::Committed(keys, _boundary)) = buf.target() else {
                     return;
                 };
                 buf.mark_converted();
-                let mut replacement = if korean_mode {
+                if korean_mode {
                     // 화면: 조합된 한글 → 원래 친 영문 키를 그대로.
                     keys
                 } else {
                     // 화면: 영문 그대로 → 한글 조합 결과를.
                     english_to_hangul_with(CONFIG.layout, &keys)
-                };
-                replacement.push(boundary);
-                replacement
+                }
             };
 
             if !wait_modifiers_released() {
                 return; // 모디파이어를 계속 누르고 있음 — 안전하게 포기.
             }
+            // 공백·줄바꿈 불가침 치환: 커서를 경계 공백 앞으로 옮긴 뒤
+            // 단어 글자만 선택해 그 위에 타이핑한다. 공백을 선택에 넣으면
+            // 단어가 줄 첫머리일 때 앱에 따라 선택이 이전 줄의 줄바꿈까지
+            // 넘어가 줄이 합쳐진다.
+            inject::tap_key(inject::VK_LEFT);
             inject::select_previous_word();
             std::thread::sleep(Duration::from_millis(20));
             inject::type_text(&replacement);
-            // 이어서 올바른 모드로 계속 타이핑할 수 있도록 한/영 전환.
+            inject::tap_key(inject::VK_RIGHT); // 기존 공백 뒤로 복귀.
+                                               // 이어서 올바른 모드로 계속 타이핑할 수 있도록 한/영 전환.
             inject::press_hangul_toggle();
             KOREAN_MODE.fetch_xor(true, Ordering::Relaxed);
         });
