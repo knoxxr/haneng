@@ -5,6 +5,14 @@
 
 ## [Unreleased]
 
+### Fixed
+- Windows: 릴리스 빌드에서 콘솔 창이 뜨지 않고 트레이로만 상주
+  (콘솔을 닫으면 데몬이 함께 종료되던 문제)
+
+### Added
+- Windows: MSI 설치 파일 (`haneng-windows.msi`) — Program Files 설치,
+  로그인 자동 시작 등록, 설치 직후 자동 실행, 업그레이드 지원
+
 ## [0.1.0] - 2026-07-18
 
 첫 릴리스.

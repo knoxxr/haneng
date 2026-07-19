@@ -20,3 +20,25 @@ Copy-Item target\release\hanengw.exe, target\release\haneng-settings.exe dist\
 Compress-Archive -Force -Path dist\hanengw.exe, dist\haneng-settings.exe `
     -DestinationPath dist\haneng-windows.zip
 Write-Host "done: dist\haneng-windows.zip"
+
+# MSI (WiX Toolset v3 - preinstalled on GitHub windows runners).
+# Installs to Program Files\haneng + login autostart + launch after install.
+$candle = Get-Command candle.exe -ErrorAction SilentlyContinue
+if (-not $candle) {
+    $wixBin = "${env:WIX}bin"
+    if (Test-Path "$wixBin\candle.exe") {
+        $env:PATH = "$wixBin;$env:PATH"
+        $candle = Get-Command candle.exe -ErrorAction SilentlyContinue
+    }
+}
+if ($candle) {
+    $version = (Select-String -Path Cargo.toml -Pattern '^version = "(.+)"')[0].Matches.Groups[1].Value
+    candle.exe -nologo -arch x64 "-dVersion=$version" "-dDist=dist" `
+        -out dist\haneng.wixobj scripts\haneng.wxs
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    light.exe -nologo -sice:ICE61 dist\haneng.wixobj -out dist\haneng-windows.msi
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    Write-Host "done: dist\haneng-windows.msi (v$version)"
+} else {
+    Write-Host "WiX not found - skipping MSI (zip only)"
+}

@@ -23,7 +23,7 @@ jobs:
             artifact: dist/haneng-macos.zip
           - os: windows-latest
             script: pwsh -File scripts/package-windows.ps1
-            artifact: dist/haneng-windows.zip
+            artifact: dist/haneng-windows.*
           - os: ubuntu-latest
             script: ./scripts/package-linux.sh
             artifact: dist/haneng-linux-x11.tar.gz

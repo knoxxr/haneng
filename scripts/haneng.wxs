@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- haneng Windows MSI (WiX Toolset v3).
+     Built by scripts/package-windows.ps1:
+       candle -dVersion=X.Y.Z -dDist=dist scripts\haneng.wxs
+       light -sice:ICE61 haneng.wixobj -o dist\haneng-windows.msi
+     Installs to Program Files\haneng, registers login autostart (HKLM Run),
+     and launches the daemon right after install. -->
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product Id="*"
+           Name="haneng"
+           Language="1033"
+           Version="$(var.Version)"
+           Manufacturer="haneng contributors"
+           UpgradeCode="34248BBC-20F6-4267-8151-3174573669C1">
+    <Package InstallerVersion="500" Compressed="yes" InstallScope="perMachine"
+             Description="Korean/English input mode typo auto-corrector" />
+    <MajorUpgrade AllowSameVersionUpgrades="yes"
+                  DowngradeErrorMessage="A newer version of haneng is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFiles64Folder">
+        <Directory Id="INSTALLFOLDER" Name="haneng">
+
+          <Component Id="DaemonExe" Guid="027EC14D-A8F5-4762-8012-DABCCCE8E4BD" Win64="yes">
+            <File Id="HanengwExe" Source="$(var.Dist)\hanengw.exe" KeyPath="yes" />
+          </Component>
+
+          <Component Id="SettingsExe" Guid="B22526B9-4841-4C7E-A231-A23A9E49FB0C" Win64="yes">
+            <File Id="HanengSettingsExe" Source="$(var.Dist)\haneng-settings.exe" KeyPath="yes" />
+          </Component>
+
+          <!-- 로그인 시 자동 시작 -->
+          <Component Id="AutostartRunKey" Guid="33E81459-A433-4EB6-B784-8111E6DDBCB1" Win64="yes">
+            <RegistryValue Root="HKLM"
+                           Key="Software\Microsoft\Windows\CurrentVersion\Run"
+                           Name="haneng"
+                           Value="&quot;[INSTALLFOLDER]hanengw.exe&quot;"
+                           Type="string"
+                           KeyPath="yes" />
+          </Component>
+
+        </Directory>
+      </Directory>
+    </Directory>
+
+    <Feature Id="Main" Level="1">
+      <ComponentRef Id="DaemonExe" />
+      <ComponentRef Id="SettingsExe" />
+      <ComponentRef Id="AutostartRunKey" />
+    </Feature>
+
+    <!-- 설치 직후 데몬 실행 (로그아웃 없이 바로 동작) -->
+    <CustomAction Id="LaunchDaemon" FileKey="HanengwExe" ExeCommand=""
+                  Return="asyncNoWait" />
+    <InstallExecuteSequence>
+      <Custom Action="LaunchDaemon" After="InstallFinalize">NOT Installed</Custom>
+    </InstallExecuteSequence>
+  </Product>
+</Wix>

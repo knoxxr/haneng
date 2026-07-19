@@ -11,6 +11,10 @@
 //!
 //! 관리자 권한 앱에는 일반 권한 훅이 닿지 않는다(알려진 Windows 제약).
 
+// 릴리스 빌드는 콘솔 없이 트레이 상주만 한다 — 콘솔 창이 뜨면 CLI처럼
+// 보이고, 사용자가 그 창을 닫는 순간 데몬이 종료된다.
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
+
 mod keymap;
 
 #[cfg(windows)]
