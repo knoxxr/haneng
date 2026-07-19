@@ -34,11 +34,13 @@ fn main() {
 
 #[cfg(windows)]
 mod win {
+    use crate::indicator::Mode;
     use crate::{ime, indicator};
     use haneng_core::config;
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::LazyLock;
     use windows_sys::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetKeyState, VK_CAPITAL};
     use windows_sys::Win32::UI::WindowsAndMessaging::{
         CallNextHookEx, DispatchMessageW, GetMessageW, SetWindowsHookExW, MSG, WH_MOUSE_LL,
         WM_MOUSEMOVE,
@@ -63,6 +65,18 @@ mod win {
         LAST_KNOWN_MODE.load(Ordering::Relaxed)
     }
 
+    /// 배지에 표시할 상태. 영문이면 Caps Lock 토글 상태로 대/소문자를
+    /// 구분한다 (GetKeyState의 토글 비트 — 키 입력 관찰이 아니라 상태 조회).
+    fn current_mode() -> Mode {
+        if current_korean_mode() {
+            Mode::Korean
+        } else if unsafe { GetKeyState(VK_CAPITAL as i32) } & 1 != 0 {
+            Mode::EnglishUpper
+        } else {
+            Mode::EnglishLower
+        }
+    }
+
     pub fn run() {
         LazyLock::force(&CONFIG);
         let initial =
@@ -73,8 +87,7 @@ mod win {
             Ordering::Relaxed,
         );
 
-        indicator::init();
-        indicator::set_mode(initial);
+        indicator::init(current_mode);
         // 트레이 아이콘은 메시지 루프가 도는 이 스레드에서 만들어야 하며,
         // 루프가 끝날 때까지 살아 있어야 한다.
         let _tray = crate::tray::install(&ENABLED);
@@ -95,7 +108,7 @@ mod win {
 
     unsafe extern "system" fn mouse_hook(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
         if code >= 0 && wparam as u32 == WM_MOUSEMOVE && ENABLED.load(Ordering::Relaxed) {
-            indicator::on_mouse_move(current_korean_mode);
+            indicator::on_mouse_move();
         }
         CallNextHookEx(std::ptr::null_mut(), code, wparam, lparam)
     }

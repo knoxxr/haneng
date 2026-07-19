@@ -1,5 +1,6 @@
 //! 한/영 상태 배지 — 마우스가 텍스트 입력(I-빔 커서) 위에 있을 때
-//! 커서 옆에 현재 IME 모드("한"/"A")를 표시한다.
+//! 커서 옆에 현재 입력 상태를 표시한다:
+//! 파랑 "한"(한글) / 회색 "a"(영문 소문자) / 주황 "A"(영문 + Caps Lock).
 //!
 //! - 입력 영역 판별: 시스템 커서가 I-빔인지 비교 (앱 무관 표준 기법.
 //!   커스텀 커서 테마에서는 감지되지 않을 수 있다 — 알려진 한계).
@@ -10,7 +11,8 @@
 //! - 끄기: config.txt에 `hover_indicator = off`.
 
 use std::mem::{size_of, zeroed};
-use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, AtomicUsize, Ordering};
+use std::sync::OnceLock;
 use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows_sys::Win32::Graphics::Gdi::{
     BeginPaint, CreateSolidBrush, DeleteObject, DrawTextW, EndPaint, FillRect, InvalidateRect,
@@ -19,29 +21,56 @@ use windows_sys::Win32::Graphics::Gdi::{
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows_sys::Win32::System::SystemInformation::GetTickCount64;
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, GetClientRect, GetCursorInfo, LoadCursorW, RegisterClassW,
-    SetLayeredWindowAttributes, SetWindowPos, ShowWindow, CURSORINFO, CURSOR_SHOWING, HWND_TOPMOST,
-    IDC_IBEAM, LWA_ALPHA, SWP_NOACTIVATE, SWP_NOSIZE, SWP_SHOWWINDOW, SW_HIDE, WM_PAINT, WNDCLASSW,
-    WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
+    CreateWindowExW, DefWindowProcW, GetClientRect, GetCursorInfo, KillTimer, LoadCursorW,
+    RegisterClassW, SetLayeredWindowAttributes, SetTimer, SetWindowPos, ShowWindow, CURSORINFO,
+    CURSOR_SHOWING, HWND_TOPMOST, IDC_IBEAM, LWA_ALPHA, SWP_NOACTIVATE, SWP_NOSIZE, SWP_SHOWWINDOW,
+    SW_HIDE, WM_PAINT, WM_TIMER, WNDCLASSW, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
+    WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
 };
+
+/// 배지에 표시할 입력 상태.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum Mode {
+    EnglishLower = 0,
+    EnglishUpper = 1,
+    Korean = 2,
+}
+
+impl Mode {
+    fn from_u8(v: u8) -> Self {
+        match v {
+            2 => Mode::Korean,
+            1 => Mode::EnglishUpper,
+            _ => Mode::EnglishLower,
+        }
+    }
+}
 
 static INDICATOR_HWND: AtomicUsize = AtomicUsize::new(0);
 static IBEAM_CURSOR: AtomicUsize = AtomicUsize::new(0);
 static VISIBLE: AtomicBool = AtomicBool::new(false);
-static KOREAN: AtomicBool = AtomicBool::new(false);
+static MODE: AtomicU8 = AtomicU8::new(0);
 static LAST_UPDATE_MS: AtomicU64 = AtomicU64::new(0);
+/// 현재 입력 상태를 알려주는 콜백 (init에서 설정).
+static MODE_SOURCE: OnceLock<fn() -> Mode> = OnceLock::new();
 
 /// 배지 한 변 크기(px)와 커서 기준 오프셋.
 const BADGE_SIZE: i32 = 22;
 const OFFSET: i32 = 18;
 const THROTTLE_MS: u64 = 50;
+/// 배지가 떠 있는 동안 상태 재확인 주기 — 마우스가 멈춰 있어도
+/// 한/영·Caps Lock 변화가 반영되게 한다.
+const REFRESH_TIMER_ID: usize = 1;
+const REFRESH_MS: u32 = 300;
 
 fn wide(s: &str) -> Vec<u16> {
     s.encode_utf16().chain([0]).collect()
 }
 
 /// 배지 창 생성 (메시지 루프 스레드에서 한 번 호출).
-pub fn init() {
+pub fn init(mode_source: fn() -> Mode) {
+    let _ = MODE_SOURCE.set(mode_source);
     unsafe {
         let hinstance = GetModuleHandleW(std::ptr::null());
         let class_name = wide("haneng-indicator");
@@ -78,22 +107,19 @@ pub fn init() {
     }
 }
 
-/// 추적 중인 한/영 모드 갱신 — 배지가 보이는 중이면 즉시 다시 그린다.
-pub fn set_mode(korean: bool) {
-    if KOREAN.swap(korean, Ordering::Relaxed) == korean {
-        return;
-    }
-    let hwnd = INDICATOR_HWND.load(Ordering::Acquire) as HWND;
-    if !hwnd.is_null() && VISIBLE.load(Ordering::Relaxed) {
+/// 상태 소스를 다시 읽어 바뀌었으면 다시 그린다.
+fn refresh_mode(hwnd: HWND) -> Mode {
+    let mode = MODE_SOURCE.get().map(|f| f()).unwrap_or(Mode::EnglishLower);
+    if MODE.swap(mode as u8, Ordering::Relaxed) != mode as u8 && !hwnd.is_null() {
         unsafe { InvalidateRect(hwnd, std::ptr::null(), 1) };
     }
+    mode
 }
 
 /// LL 마우스 훅의 이동 이벤트에서 호출 — 반드시 가볍게.
-/// `current_mode`는 배지를 실제로 표시/갱신할 때만 호출된다 (I-빔 위 +
-/// 스로틀 통과 시 최대 20회/초) — IME 실시간 질의처럼 다소 무거운
-/// 소스를 넘겨도 된다.
-pub fn on_mouse_move(current_mode: impl FnOnce() -> bool) {
+/// 상태 소스는 배지를 실제로 표시/갱신할 때만 호출된다 (I-빔 위 +
+/// 스로틀 통과 시) — IME 실시간 질의처럼 다소 무거운 소스여도 된다.
+pub fn on_mouse_move() {
     let hwnd = INDICATOR_HWND.load(Ordering::Acquire) as HWND;
     if hwnd.is_null() {
         return;
@@ -114,8 +140,7 @@ pub fn on_mouse_move(current_mode: impl FnOnce() -> bool) {
         let over_text = info.flags == CURSOR_SHOWING
             && info.hCursor as usize == IBEAM_CURSOR.load(Ordering::Relaxed);
         if over_text {
-            let mode = current_mode();
-            let mode_changed = KOREAN.swap(mode, Ordering::Relaxed) != mode;
+            refresh_mode(hwnd);
             let first_show = !VISIBLE.swap(true, Ordering::Relaxed);
             SetWindowPos(
                 hwnd,
@@ -126,10 +151,12 @@ pub fn on_mouse_move(current_mode: impl FnOnce() -> bool) {
                 0,
                 SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW,
             );
-            if first_show || mode_changed {
+            if first_show {
                 InvalidateRect(hwnd, std::ptr::null(), 1);
+                SetTimer(hwnd, REFRESH_TIMER_ID, REFRESH_MS, None);
             }
         } else if VISIBLE.swap(false, Ordering::Relaxed) {
+            KillTimer(hwnd, REFRESH_TIMER_ID);
             ShowWindow(hwnd, SW_HIDE);
         }
     }
@@ -141,19 +168,31 @@ unsafe extern "system" fn wnd_proc(
     wparam: WPARAM,
     lparam: LPARAM,
 ) -> LRESULT {
+    if msg == WM_TIMER && wparam == REFRESH_TIMER_ID {
+        if VISIBLE.load(Ordering::Relaxed) {
+            refresh_mode(hwnd);
+        }
+        return 0;
+    }
     if msg == WM_PAINT {
-        let korean = KOREAN.load(Ordering::Relaxed);
+        let mode = Mode::from_u8(MODE.load(Ordering::Relaxed));
         let mut ps: PAINTSTRUCT = zeroed();
         let hdc = BeginPaint(hwnd, &mut ps);
         let mut rect: RECT = zeroed();
         GetClientRect(hwnd, &mut rect);
-        // 한 = 파랑(#2B6CB0), 영 = 회색(#4A5568) 배경에 흰 글자 (COLORREF는 BGR).
-        let bg = CreateSolidBrush(if korean { 0x00B06C2B } else { 0x0068554A });
+        // COLORREF는 BGR: 한=파랑(#2B6CB0), a=회색(#4A5568),
+        // A=주황(#DD6B20 — Caps Lock 켜짐 경고).
+        let (color, label) = match mode {
+            Mode::Korean => (0x00B06C2Bu32, "한"),
+            Mode::EnglishUpper => (0x00206BDD, "A"),
+            Mode::EnglishLower => (0x0068554A, "a"),
+        };
+        let bg = CreateSolidBrush(color);
         FillRect(hdc, &rect, bg);
         DeleteObject(bg as _);
         SetBkMode(hdc, TRANSPARENT as i32);
         SetTextColor(hdc, 0x00FFFFFF);
-        let label = wide(if korean { "한" } else { "A" });
+        let label = wide(label);
         DrawTextW(
             hdc,
             label.as_ptr(),
