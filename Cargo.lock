@@ -1402,29 +1402,29 @@ dependencies = [
 
 [[package]]
 name = "haneng-cli"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "haneng-core",
 ]
 
 [[package]]
 name = "haneng-core"
-version = "0.3.0"
+version = "0.3.1"
 
 [[package]]
 name = "haneng-datagen"
-version = "0.3.0"
+version = "0.3.1"
 
 [[package]]
 name = "haneng-ffi"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "haneng-core",
 ]
 
 [[package]]
 name = "haneng-linux"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "haneng-core",
  "x11rb",
@@ -1432,7 +1432,7 @@ dependencies = [
 
 [[package]]
 name = "haneng-macos"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "core-foundation 0.10.1",
  "core-foundation-sys",
@@ -1444,7 +1444,7 @@ dependencies = [
 
 [[package]]
 name = "haneng-settings"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "eframe",
  "haneng-core",
@@ -1453,7 +1453,7 @@ dependencies = [
 
 [[package]]
 name = "haneng-windows"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "haneng-core",
  "tray-icon",
