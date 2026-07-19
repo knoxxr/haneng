@@ -25,6 +25,8 @@ mod appinfo;
 #[cfg(windows)]
 mod ime;
 #[cfg(windows)]
+mod indicator;
+#[cfg(windows)]
 mod inject;
 #[cfg(windows)]
 mod secure;
@@ -46,7 +48,7 @@ fn main() {
 mod win {
     use crate::inject::{self, INJECT_MARKER};
     use crate::keymap::{classify, VK_HANGUL_KEY};
-    use crate::{appinfo, ime, secure};
+    use crate::{appinfo, ime, indicator, secure};
     use haneng_core::{config, english_to_hangul_with, InjectionLock, Target, WordBuffer};
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::{LazyLock, Mutex};
@@ -57,8 +59,8 @@ mod win {
     };
     use windows_sys::Win32::UI::WindowsAndMessaging::{
         CallNextHookEx, DispatchMessageW, GetMessageW, SetWindowsHookExW, KBDLLHOOKSTRUCT, MSG,
-        WH_KEYBOARD_LL, WH_MOUSE_LL, WM_KEYDOWN, WM_LBUTTONDOWN, WM_MBUTTONDOWN, WM_RBUTTONDOWN,
-        WM_SYSKEYDOWN,
+        WH_KEYBOARD_LL, WH_MOUSE_LL, WM_KEYDOWN, WM_LBUTTONDOWN, WM_MBUTTONDOWN, WM_MOUSEMOVE,
+        WM_RBUTTONDOWN, WM_SYSKEYDOWN,
     };
 
     pub static ENABLED: AtomicBool = AtomicBool::new(true);
@@ -85,6 +87,11 @@ mod win {
     pub fn run() {
         LazyLock::force(&CONFIG);
         KOREAN_MODE.store(ime::korean_mode(), Ordering::Relaxed);
+        // 입력창 위 한/영 배지 (config: hover_indicator = off 로 끔).
+        if CONFIG.extra("hover_indicator") != Some("off") {
+            indicator::init();
+            indicator::set_mode(KOREAN_MODE.load(Ordering::Relaxed));
+        }
         // 트레이 아이콘은 메시지 루프가 도는 이 스레드에서 만들어야 하며,
         // 루프가 끝날 때까지 살아 있어야 한다.
         let _tray = crate::tray::install(&ENABLED);
@@ -124,7 +131,9 @@ mod win {
     unsafe extern "system" fn mouse_hook(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
         if code >= 0 {
             let message = wparam as u32;
-            if matches!(message, WM_LBUTTONDOWN | WM_RBUTTONDOWN | WM_MBUTTONDOWN) {
+            if message == WM_MOUSEMOVE {
+                indicator::on_mouse_move();
+            } else if matches!(message, WM_LBUTTONDOWN | WM_RBUTTONDOWN | WM_MBUTTONDOWN) {
                 // 클릭은 포커스/커서 이동일 수 있다 → 추적 포기.
                 BUFFER.lock().unwrap().clear();
             }
@@ -136,7 +145,8 @@ mod win {
     fn on_key_down(vk: u16) -> bool {
         // 한/영 키 관찰 → 모드 추적. (주입 이벤트는 마커로 걸러졌다)
         if vk == VK_HANGUL_KEY {
-            KOREAN_MODE.fetch_xor(true, Ordering::Relaxed);
+            let korean = !KOREAN_MODE.fetch_xor(true, Ordering::Relaxed);
+            indicator::set_mode(korean);
             return false;
         }
         let ctrl = key_down(VK_CONTROL);
@@ -217,7 +227,8 @@ mod win {
             inject::tap_key(inject::VK_RIGHT); // 기존 공백 뒤로 복귀.
                                                // 이어서 올바른 모드로 계속 타이핑할 수 있도록 한/영 전환.
             inject::press_hangul_toggle();
-            KOREAN_MODE.fetch_xor(true, Ordering::Relaxed);
+            let korean = !KOREAN_MODE.fetch_xor(true, Ordering::Relaxed);
+            indicator::set_mode(korean);
         });
     }
 }
