@@ -27,6 +27,7 @@ mod lexicon_data;
 #[rustfmt::skip]
 mod sebeolsik_data;
 pub mod plan;
+pub mod sync;
 pub mod tracker;
 
 pub use auto::{AutoCorrector, AutoDecision};
@@ -36,4 +37,5 @@ pub use decompose::{hangul_to_english, hangul_to_english_with};
 pub use detect::{english_score, Detector, Sensitivity, Verdict};
 pub use layout::Layout;
 pub use plan::{build_replace_plan, ReplacePlan};
+pub use sync::InjectionLock;
 pub use tracker::{KeyClass, Target, WordBuffer};

@@ -47,7 +47,7 @@ mod win {
     use crate::inject::{self, INJECT_MARKER};
     use crate::keymap::{classify, VK_HANGUL_KEY};
     use crate::{appinfo, ime, secure};
-    use haneng_core::{config, english_to_hangul_with, Target, WordBuffer};
+    use haneng_core::{config, english_to_hangul_with, InjectionLock, Target, WordBuffer};
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::{LazyLock, Mutex};
     use std::time::Duration;
@@ -63,6 +63,8 @@ mod win {
 
     pub static ENABLED: AtomicBool = AtomicBool::new(true);
     static BUFFER: Mutex<WordBuffer> = Mutex::new(WordBuffer::new());
+    /// 변환은 한 번에 하나 — 핫키 연타로 주입이 겹치면 텍스트가 깨진다.
+    static CONVERTING: InjectionLock = InjectionLock::new();
 
     /// 추적 중인 IME 모드. 시작 시 레거시 IME 질의로 초기화하고(신형 IME는
     /// 응답하지 않아 영문 가정), 이후 한/영 키 관찰로 따라간다.
@@ -153,6 +155,19 @@ mod win {
         BUFFER.lock().unwrap().feed(class);
     }
 
+    /// Ctrl/Shift가 물리적으로 떼어질 때까지 대기. 시간 안에 떼어지지
+    /// 않으면 false — 모디파이어가 눌린 채 주입하면 앱이 주입 문자를
+    /// Ctrl+문자 단축키로 해석하므로 강행하지 않는다.
+    fn wait_modifiers_released() -> bool {
+        for _ in 0..150 {
+            if !key_down(VK_CONTROL) && !key_down(VK_SHIFT) {
+                return true;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        false
+    }
+
     /// Ctrl+Shift+Space: 공백으로 확정된 마지막 단어를 반대 모드로 치환.
     ///
     /// 삭제 대신 Ctrl+Shift+Left 선택 위에 타이핑하므로 화면 글자 수를
@@ -160,6 +175,10 @@ mod win {
     /// 조합 중(preedit)인 단어는 건드리지 않는다 — 공백을 먼저 쳐야 한다.
     fn trigger_manual_conversion() {
         std::thread::spawn(|| {
+            // 진행 중인 변환이 있으면 이 누름은 버린다 (연타 시 주입 중첩 방지).
+            let Some(_guard) = CONVERTING.try_acquire() else {
+                return;
+            };
             if secure::password_field_focused() || foreground_app_disabled() {
                 return;
             }
@@ -181,13 +200,8 @@ mod win {
                 replacement
             };
 
-            // Ctrl/Shift가 눌린 채면 주입 키가 단축키로 해석된다 →
-            // 모디파이어를 뗄 때까지 대기 (최대 1초).
-            for _ in 0..100 {
-                if !key_down(VK_CONTROL) && !key_down(VK_SHIFT) {
-                    break;
-                }
-                std::thread::sleep(Duration::from_millis(10));
+            if !wait_modifiers_released() {
+                return; // 모디파이어를 계속 누르고 있음 — 안전하게 포기.
             }
             inject::select_previous_word();
             std::thread::sleep(Duration::from_millis(20));

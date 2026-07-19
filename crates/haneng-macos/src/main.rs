@@ -42,7 +42,8 @@ mod macos {
         CGEventTapPlacement, CGEventType, CallbackResult, EventField,
     };
     use haneng_core::{
-        build_replace_plan, config, AutoCorrector, Detector, KeyClass, Target, WordBuffer,
+        build_replace_plan, config, AutoCorrector, Detector, InjectionLock, KeyClass, Target,
+        WordBuffer,
     };
     use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64, Ordering};
     use std::sync::{Arc, LazyLock, Mutex};
@@ -58,6 +59,10 @@ mod macos {
 
     /// 마지막 키 이벤트의 대상 프로세스 PID (앱별 예외 판정용).
     static LAST_TARGET_PID: AtomicI64 = AtomicI64::new(0);
+
+    /// 주입(변환·자동 교정·되돌리기)은 한 번에 하나 — 핫키 연타 등으로
+    /// 겹치면 백스페이스·텍스트 주입이 뒤섞여 텍스트가 깨진다.
+    static CONVERTING: InjectionLock = InjectionLock::new();
 
     static CONFIG: LazyLock<config::Config> = LazyLock::new(config::load_config);
 
@@ -253,6 +258,9 @@ mod macos {
     fn trigger_auto_correction(keys: String, boundary: char) {
         let generation = GENERATION.load(Ordering::Relaxed);
         std::thread::spawn(move || {
+            let Some(_guard) = CONVERTING.try_acquire() else {
+                return; // 다른 주입 진행 중 — 이 교정은 버린다.
+            };
             std::thread::sleep(Duration::from_millis(60));
             if GENERATION.load(Ordering::Relaxed) != generation {
                 return; // 사용자가 계속 타이핑 중 — 건드리지 않는다.
@@ -293,6 +301,9 @@ mod macos {
     /// 자동 교정 되돌리기: 사용자 백스페이스가 경계를 지운 뒤 호출된다.
     fn trigger_undo(record: UndoRecord) {
         std::thread::spawn(move || {
+            let Some(_guard) = CONVERTING.try_acquire() else {
+                return;
+            };
             if inject::replace_text(record.remaining_backspaces, &record.revert).is_err() {
                 eprintln!("되돌리기 주입 실패");
                 return;
@@ -312,6 +323,9 @@ mod macos {
     /// ⌘⇧Space 수동 변환. 탭 콜백을 막지 않도록 별도 스레드에서 실행.
     fn trigger_manual_conversion(state: Arc<Mutex<WordBuffer>>) {
         std::thread::spawn(move || {
+            let Some(_guard) = CONVERTING.try_acquire() else {
+                return; // 진행 중인 변환이 있으면 이 누름은 버린다.
+            };
             if tis::secure_input_active() || target_app_disabled() {
                 return;
             }

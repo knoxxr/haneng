@@ -43,7 +43,8 @@ mod linux {
         SPACE_KEYCODE,
     };
     use haneng_core::{
-        build_replace_plan, config, AutoCorrector, Detector, KeyClass, Target, WordBuffer,
+        build_replace_plan, config, AutoCorrector, Detector, InjectionLock, KeyClass, Target,
+        WordBuffer,
     };
     use std::error::Error;
     use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -59,6 +60,8 @@ mod linux {
     static KOREAN_MODE: AtomicBool = AtomicBool::new(false);
     static BUFFER: Mutex<WordBuffer> = Mutex::new(WordBuffer::new());
     static GENERATION: AtomicU64 = AtomicU64::new(0);
+    /// 주입은 한 번에 하나 — 핫키 연타 등으로 겹치면 텍스트가 깨진다.
+    static CONVERTING: InjectionLock = InjectionLock::new();
     /// 주입용 연결 (관찰용 연결과 분리).
     static INJECT_CONN: OnceLock<Arc<RustConnection>> = OnceLock::new();
     static TOGGLE_KEYCODES: OnceLock<Vec<u8>> = OnceLock::new();
@@ -253,6 +256,9 @@ mod linux {
     fn trigger_auto_correction(keys: String, boundary: char) {
         let generation = GENERATION.load(Ordering::Relaxed);
         std::thread::spawn(move || {
+            let Some(_guard) = CONVERTING.try_acquire() else {
+                return; // 다른 주입 진행 중 — 이 교정은 버린다.
+            };
             std::thread::sleep(Duration::from_millis(60));
             if GENERATION.load(Ordering::Relaxed) != generation || active_app_disabled() {
                 return;
@@ -286,6 +292,9 @@ mod linux {
 
     fn trigger_undo(record: UndoRecord) {
         std::thread::spawn(move || {
+            let Some(_guard) = CONVERTING.try_acquire() else {
+                return;
+            };
             let conn = INJECT_CONN.get().expect("initialized in run()");
             if let Err(e) = inject::replace_text(conn, record.remaining_backspaces, &record.revert)
             {
@@ -306,6 +315,9 @@ mod linux {
 
     fn trigger_manual_conversion() {
         std::thread::spawn(|| {
+            let Some(_guard) = CONVERTING.try_acquire() else {
+                return; // 진행 중인 변환이 있으면 이 누름은 버린다.
+            };
             if active_app_disabled() {
                 return;
             }
@@ -317,14 +329,38 @@ mod linux {
                 buf.mark_converted();
                 plan
             };
-            // 사용자가 핫키 모디파이어에서 손을 뗄 시간.
-            std::thread::sleep(Duration::from_millis(50));
             let conn = INJECT_CONN.get().expect("initialized in run()");
+            if !wait_modifiers_released(conn) {
+                return; // 모디파이어를 계속 누르고 있음 — 안전하게 포기.
+            }
             if let Err(e) = inject::replace_text(conn, plan.backspaces, &plan.replacement) {
                 eprintln!("이벤트 주입 실패: {e}");
                 return;
             }
             switch_mode(!korean_mode);
         });
+    }
+
+    /// Ctrl/Shift가 물리적으로 떼어질 때까지 대기 (X 서버 modifier state
+    /// 질의). 눌린 채 백스페이스를 주입하면 앱이 Ctrl+Backspace(단어 삭제)
+    /// 로 해석하므로, 시간 안에 떼어지지 않으면 false를 돌려 포기시킨다.
+    fn wait_modifiers_released(conn: &RustConnection) -> bool {
+        use x11rb::protocol::xproto::ConnectionExt as _;
+        let Some(root) = conn.setup().roots.first().map(|s| s.root) else {
+            return false;
+        };
+        for _ in 0..150 {
+            let held = conn
+                .query_pointer(root)
+                .ok()
+                .and_then(|c| c.reply().ok())
+                .map(|r| u16::from(r.mask) & (SHIFT_MASK | CONTROL_MASK) != 0)
+                .unwrap_or(false);
+            if !held {
+                return true;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        false
     }
 }
