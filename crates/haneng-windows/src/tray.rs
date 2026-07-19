@@ -16,14 +16,11 @@ thread_local! {
     static CHECK_ITEMS: RefCell<Option<CheckMenuItem>> = const { RefCell::new(None) };
 }
 
-/// 단색 16×16 아이콘 (에셋 없이 생성).
-fn solid_icon() -> Icon {
-    const SIZE: usize = 16;
-    let mut rgba = Vec::with_capacity(SIZE * SIZE * 4);
-    for _ in 0..SIZE * SIZE {
-        rgba.extend_from_slice(&[0x2B, 0x6C, 0xB0, 0xFF]);
-    }
-    Icon::from_rgba(rgba, SIZE as u32, SIZE as u32).expect("valid rgba icon")
+/// 앱 아이콘 (scripts/gen-icon.py가 생성한 원시 RGBA).
+fn app_icon() -> Icon {
+    const SIZE: u32 = 32;
+    let rgba = include_bytes!("../../../assets/tray-32.rgba").to_vec();
+    Icon::from_rgba(rgba, SIZE, SIZE).expect("valid rgba icon")
 }
 
 /// 데몬 실행 파일 옆의 haneng-settings.exe를 띄운다.
@@ -83,7 +80,7 @@ pub fn install(enabled: &'static AtomicBool) -> TrayIcon {
 
     TrayIconBuilder::new()
         .with_menu(Box::new(menu))
-        .with_icon(solid_icon())
+        .with_icon(app_icon())
         .with_tooltip("haneng — 한/영 상태 표시기")
         .build()
         .expect("create tray icon")

@@ -15,10 +15,16 @@ use std::sync::{Arc, Mutex};
 use update::UpdateState;
 
 fn main() -> eframe::Result {
+    let icon = eframe::egui::IconData {
+        rgba: include_bytes!("../../../assets/icon-64.rgba").to_vec(),
+        width: 64,
+        height: 64,
+    };
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
             .with_inner_size([420.0, 320.0])
-            .with_title("haneng 설정"),
+            .with_title("haneng 설정")
+            .with_icon(std::sync::Arc::new(icon)),
         ..Default::default()
     };
     eframe::run_native(

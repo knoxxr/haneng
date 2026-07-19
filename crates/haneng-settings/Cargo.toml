@@ -27,3 +27,6 @@ ureq = "3.3.0"
 
 [target.'cfg(windows)'.dependencies]
 ureq = { version = "3.3.0", default-features = false, features = ["native-tls", "gzip"] }
+
+[build-dependencies]
+winresource = "0.1.31"

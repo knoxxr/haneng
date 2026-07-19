@@ -13,10 +13,13 @@
            Manufacturer="haneng contributors"
            UpgradeCode="34248BBC-20F6-4267-8151-3174573669C1">
     <Package InstallerVersion="500" Compressed="yes" InstallScope="perMachine"
-             Description="Korean/English input mode typo auto-corrector" />
+             Description="Korean/English IME state indicator" />
     <MajorUpgrade AllowSameVersionUpgrades="yes"
                   DowngradeErrorMessage="A newer version of haneng is already installed." />
     <MediaTemplate EmbedCab="yes" />
+
+    <Icon Id="haneng.ico" SourceFile="assets\haneng.ico" />
+    <Property Id="ARPPRODUCTICON" Value="haneng.ico" />
 
     <Directory Id="TARGETDIR" Name="SourceDir">
       <Directory Id="ProgramFiles64Folder">

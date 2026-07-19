@@ -5,6 +5,10 @@
 
 ## [Unreleased]
 
+### Added
+- 앱 아이콘 (배지 모티프: 파란 한 / 회색 A) — 트레이, exe, 설정 창,
+  프로그램 추가/제거(MSI)에 적용. 생성 스크립트: scripts/gen-icon.py
+
 ## [0.4.0] - 2026-07-19
 
 ### Changed (BREAKING)
