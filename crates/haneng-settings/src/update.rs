@@ -12,6 +12,23 @@
 pub const REPO: &str = "knoxxr/haneng";
 pub const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
+/// 타임아웃과 TLS 프로바이더를 명시한 에이전트.
+///
+/// Windows는 native-tls 기능만 켜고 rustls를 빼고 빌드하는데, ureq의
+/// 기본 설정은 여전히 rustls를 찾는다 — 명시하지 않으면 https 요청이
+/// 런타임에 실패(패닉)해 확인 스피너가 영원히 남는 버그가 된다.
+fn agent() -> ureq::Agent {
+    let builder = ureq::Agent::config_builder()
+        .timeout_global(Some(std::time::Duration::from_secs(15)));
+    #[cfg(windows)]
+    let builder = builder.tls_config(
+        ureq::tls::TlsConfig::builder()
+            .provider(ureq::tls::TlsProvider::NativeTls)
+            .build(),
+    );
+    ureq::Agent::new_with_config(builder.build())
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum UpdateState {
     Idle,
@@ -26,7 +43,8 @@ pub enum UpdateState {
 /// 최신 릴리스 태그를 조회해 현재 버전과 비교한다 (블로킹 — 스레드에서 호출).
 pub fn check() -> UpdateState {
     let url = format!("https://api.github.com/repos/{REPO}/releases/latest");
-    let body = match ureq::get(&url)
+    let body = match agent()
+        .get(&url)
         .header("User-Agent", "haneng-settings")
         .call()
     {
@@ -77,7 +95,8 @@ fn is_newer(tag: &str, current: &str) -> bool {
 pub fn install(tag: &str) -> Result<(), String> {
     use std::io::Read;
     let url = format!("https://github.com/{REPO}/releases/download/{tag}/haneng-windows.msi");
-    let mut res = ureq::get(&url)
+    let mut res = agent()
+        .get(&url)
         .header("User-Agent", "haneng-settings")
         .call()
         .map_err(|e| format!("다운로드 실패: {e}"))?;
@@ -126,6 +145,17 @@ mod tests {
         let json = r#"{"url":"...","tag_name": "v0.1.2","name":"haneng v0.1.2"}"#;
         assert_eq!(extract_tag_name(json).as_deref(), Some("v0.1.2"));
         assert_eq!(extract_tag_name("{}"), None);
+    }
+
+    #[test]
+    #[ignore = "네트워크 필요: cargo test -p haneng-settings live_check -- --ignored --nocapture"]
+    fn live_check() {
+        let result = check();
+        println!("check() = {result:?} (current v{CURRENT_VERSION})");
+        assert!(
+            !matches!(result, UpdateState::Error(_) | UpdateState::Checking | UpdateState::Idle),
+            "실제 조회가 실패: {result:?}"
+        );
     }
 
     #[test]

@@ -15,8 +15,17 @@ OLD=$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2)
 echo "버전: $OLD → $NEW"
 
 # 워크스페이스 공유 버전이 유일한 버전 선언이다.
-sed -i '' "0,/^version = \"$OLD\"/s//version = \"$NEW\"/" Cargo.toml 2>/dev/null \
-    || sed -i "0,/^version = \"$OLD\"/s//version = \"$NEW\"/" Cargo.toml
+# (sed의 0,/re/ 주소는 GNU 전용이라 macOS에서 조용히 실패한다 — python으로.)
+python3 - "$OLD" "$NEW" <<'EOF'
+import sys
+old, new = sys.argv[1], sys.argv[2]
+path = "Cargo.toml"
+text = open(path).read()
+target = f'version = "{old}"'
+assert target in text, f"Cargo.toml에서 {target}를 찾지 못함"
+open(path, "w").write(text.replace(target, f'version = "{new}"', 1))
+EOF
+grep -q "^version = \"$NEW\"" Cargo.toml || { echo "버전 치환 실패"; exit 1; }
 cargo check -q 2>/dev/null || true   # Cargo.lock 버전 갱신
 
 # CHANGELOG: Unreleased 아래에 새 버전 섹션 삽입.

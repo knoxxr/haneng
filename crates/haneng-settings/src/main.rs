@@ -93,7 +93,9 @@ impl SettingsApp {
         let state = self.update.clone();
         let ctx = ctx.clone();
         std::thread::spawn(move || {
-            let result = update::check();
+            // 어떤 경우에도 스피너가 영원히 남지 않도록 패닉도 오류로 바꾼다.
+            let result = std::panic::catch_unwind(update::check)
+                .unwrap_or_else(|_| UpdateState::Error("확인 중 내부 오류".into()));
             *state.lock().unwrap() = result;
             ctx.request_repaint();
         });
@@ -105,11 +107,12 @@ impl SettingsApp {
         let state = self.update.clone();
         let ctx = ctx.clone();
         std::thread::spawn(move || {
-            if let Err(e) = update::install(&tag) {
-                *state.lock().unwrap() = UpdateState::Error(e);
-            } else {
-                *state.lock().unwrap() = UpdateState::Idle;
-            }
+            let result = std::panic::catch_unwind(move || update::install(&tag))
+                .unwrap_or_else(|_| Err("설치 중 내부 오류".into()));
+            *state.lock().unwrap() = match result {
+                Ok(()) => UpdateState::Idle,
+                Err(e) => UpdateState::Error(e),
+            };
             ctx.request_repaint();
         });
     }
