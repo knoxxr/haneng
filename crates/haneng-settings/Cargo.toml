@@ -19,3 +19,11 @@ eframe = { version = "0.35.0", default-features = false, features = [
     "x11",
 ] }
 haneng-core = { path = "../haneng-core" }
+
+# 업데이트 확인용 HTTP 클라이언트. Windows는 rustls(ring)의 빌드 스크립트가
+# 크로스체크를 깨뜨려 OS 네이티브 TLS(schannel)를 쓴다.
+[target.'cfg(not(windows))'.dependencies]
+ureq = "3.3.0"
+
+[target.'cfg(windows)'.dependencies]
+ureq = { version = "3.3.0", default-features = false, features = ["native-tls", "gzip"] }

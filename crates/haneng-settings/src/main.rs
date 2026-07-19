@@ -8,7 +8,11 @@
 
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
+mod update;
+
 use haneng_core::{config, Config, Layout, Sensitivity};
+use std::sync::{Arc, Mutex};
+use update::UpdateState;
 
 fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
@@ -66,6 +70,7 @@ struct SettingsApp {
     exceptions: Vec<String>,
     new_exception: String,
     status: String,
+    update: Arc<Mutex<UpdateState>>,
 }
 
 impl SettingsApp {
@@ -78,7 +83,35 @@ impl SettingsApp {
             exceptions: config::load_exceptions(),
             new_exception: String::new(),
             status: String::new(),
+            update: Arc::new(Mutex::new(UpdateState::Idle)),
         }
+    }
+
+    /// 백그라운드 스레드에서 최신 릴리스를 확인한다 (UI 블로킹 방지).
+    fn start_update_check(&self, ctx: &eframe::egui::Context) {
+        *self.update.lock().unwrap() = UpdateState::Checking;
+        let state = self.update.clone();
+        let ctx = ctx.clone();
+        std::thread::spawn(move || {
+            let result = update::check();
+            *state.lock().unwrap() = result;
+            ctx.request_repaint();
+        });
+    }
+
+    /// 업데이트 설치 시작 (Windows: MSI 설치 후 프로세스 종료).
+    fn start_install(&self, tag: String, ctx: &eframe::egui::Context) {
+        *self.update.lock().unwrap() = UpdateState::Installing;
+        let state = self.update.clone();
+        let ctx = ctx.clone();
+        std::thread::spawn(move || {
+            if let Err(e) = update::install(&tag) {
+                *state.lock().unwrap() = UpdateState::Error(e);
+            } else {
+                *state.lock().unwrap() = UpdateState::Idle;
+            }
+            ctx.request_repaint();
+        });
     }
 
     fn save(&mut self) {
@@ -186,6 +219,52 @@ impl eframe::App for SettingsApp {
             if !self.status.is_empty() {
                 ui.add_space(4.0);
                 ui.small(&self.status);
+            }
+
+            ui.add_space(12.0);
+            ui.separator();
+            let update_state = self.update.lock().unwrap().clone();
+            ui.horizontal(|ui| {
+                ui.label(format!("버전 v{}", update::CURRENT_VERSION));
+                match &update_state {
+                    UpdateState::Idle | UpdateState::UpToDate | UpdateState::Error(_) => {
+                        if ui.button("업데이트 확인").clicked() {
+                            self.start_update_check(ui.ctx());
+                        }
+                    }
+                    UpdateState::Checking => {
+                        ui.spinner();
+                        ui.label("확인 중...");
+                    }
+                    UpdateState::Available(tag) => {
+                        let label = if cfg!(windows) {
+                            format!("{tag}(으)로 업데이트")
+                        } else {
+                            format!("{tag} 다운로드 페이지 열기")
+                        };
+                        if ui.button(label).clicked() {
+                            self.start_install(tag.clone(), ui.ctx());
+                        }
+                    }
+                    UpdateState::Installing => {
+                        ui.spinner();
+                        ui.label("설치 준비 중... (설치가 시작되면 이 창은 닫힙니다)");
+                    }
+                }
+            });
+            match &update_state {
+                UpdateState::UpToDate => {
+                    ui.small("최신 버전입니다.");
+                }
+                UpdateState::Available(tag) => {
+                    ui.small(format!(
+                        "새 버전 {tag} 사용 가능. 업데이트 확인은 버튼을 눌렀을 때만 네트워크에 접속합니다."
+                    ));
+                }
+                UpdateState::Error(e) => {
+                    ui.small(format!("업데이트 확인 오류: {e}"));
+                }
+                _ => {}
             }
         }
     }
