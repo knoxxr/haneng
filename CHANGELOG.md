@@ -5,6 +5,8 @@
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-07-19
+
 ### Added
 - 배지가 영문 대/소문자를 구분해 표시: 파랑 "한"(한글) / 회색 "a"(영문
   소문자) / 주황 "A"(영문 + Caps Lock — 경고 색). Caps Lock은 GetKeyState
