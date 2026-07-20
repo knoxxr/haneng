@@ -31,8 +31,24 @@ haneng은 **마우스를 입력창 위에 올리면 커서 옆에 현재 입력 
 | OS | 파일 | 참고 |
 |---|---|---|
 | Windows | `haneng-windows.msi` (권장) / `.zip` | 설치 즉시 실행 + 로그인 자동 시작. SmartScreen 경고 시 "추가 정보 → 실행" |
-| macOS 11+ | `haneng-macos.zip` | haneng.app 실행 → 시스템 설정 → 개인정보 보호 및 보안 → **손쉬운 사용** 권한 허용. 서명이 없어 첫 실행은 우클릭 → 열기 |
+| macOS 11+ (Apple Silicon) | `haneng-macos.zip` | 아래 "macOS 첫 실행" 참고. 실행에는 **손쉬운 사용** 권한 필요 |
 | Linux (X11) | `haneng-linux-x11.tar.gz` | `hanengl` 실행. **실험적** — Wayland 미지원 |
+
+### macOS 첫 실행
+
+haneng.app은 Apple 유료 인증서로 서명·공증되지 않았습니다(ad-hoc 서명만).
+그래서 다운로드하면 격리(quarantine) 속성이 붙어, macOS가 "손상되었기
+때문에 열 수 없습니다"라며 **휴지통으로 보낼 수 있습니다.** 이는 손상이
+아니라 서명 미검증 때문이며, 격리 속성을 지우면 정상 실행됩니다:
+
+```sh
+# haneng.app을 응용 프로그램 폴더로 옮긴 뒤 (다른 위치면 그 경로로):
+xattr -dr com.apple.quarantine /Applications/haneng.app
+open /Applications/haneng.app
+```
+
+이후 시스템 설정 → 개인정보 보호 및 보안 → **손쉬운 사용**에 haneng을
+추가해야 배지가 동작합니다.
 
 트레이/메뉴바 아이콘: 배지 표시 토글 · 설정 · 종료.
 설정 창에서 **업데이트 확인** 버튼으로 새 버전을 설치할 수 있습니다

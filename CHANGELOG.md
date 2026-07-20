@@ -5,6 +5,12 @@
 
 ## [Unreleased]
 
+### Fixed
+- macOS: 다운로드한 앱이 실행 즉시 휴지통으로 보내지던 문제 — 앱 번들을
+  ad-hoc 서명해 macOS가 "손상됨"으로 오판하지 않게 했다. 서명/공증이 없어
+  여전히 격리 속성 제거(`xattr -dr com.apple.quarantine`)가 필요하며
+  README에 안내를 추가했다.
+
 ## [0.5.0] - 2026-07-20
 
 ### Added

@@ -64,12 +64,19 @@ cat > dist/kr.haneng.indicator.plist <<'PLIST'
 </plist>
 PLIST
 
+# 내부 실행 파일부터 서명한 뒤 번들을 서명해야 한다(inside-out).
+INNER=("$APP/Contents/MacOS/hanengd" "$APP/Contents/MacOS/haneng-settings")
 if [[ -n "${SIGN_IDENTITY:-}" ]]; then
-    codesign --force --options runtime --sign "$SIGN_IDENTITY" \
-        "$APP/Contents/MacOS/hanengd" "$APP/Contents/MacOS/haneng-settings" "$APP"
+    codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" "${INNER[@]}"
+    codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" "$APP"
     echo "서명 완료: $SIGN_IDENTITY"
 else
-    echo "SIGN_IDENTITY 미지정 — 서명 없이 패키징 (첫 실행 시 우클릭 → 열기)"
+    # 유료 인증서가 없을 때: ad-hoc 서명(-)으로 번들에 유효한 서명을 붙인다.
+    # 이게 없으면 Apple Silicon + 격리(quarantine) 조합에서 macOS가 앱을
+    # "손상됨"으로 보고 실행 즉시 휴지통으로 보낸다. ad-hoc 서명이면 "확인
+    # 안 된 개발자" 경로로 떨어져 사용자가 열 수 있다.
+    codesign --force --deep --sign - "$APP"
+    codesign --verify --deep --strict "$APP" && echo "ad-hoc 서명 완료 (인증서 없음)"
 fi
 
 (cd dist && rm -f haneng-macos.zip && zip -qr haneng-macos.zip haneng.app kr.haneng.indicator.plist)
