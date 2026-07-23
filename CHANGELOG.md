@@ -5,6 +5,8 @@
 
 ## [Unreleased]
 
+## [0.8.4] - 2026-07-24
+
 ### Changed
 - macOS 멀티모니터: 주 디스플레이 높이 기준을 CoreGraphics
   `CGMainDisplayID`로 확정(포커스 따라 흔들릴 수 있는 경로 제거).
