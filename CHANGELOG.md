@@ -5,6 +5,8 @@
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-07-23
+
 ### Fixed
 - macOS 멀티모니터: 보조 모니터의 입력 카렛에 대해 배지가 주 화면에 잘못
   뜨던 문제 — AX(top-left)↔Cocoa(bottom-left) 좌표 변환을 배지가 놓인
