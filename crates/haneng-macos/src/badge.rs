@@ -7,7 +7,7 @@
 use objc2::rc::Retained;
 use objc2::{MainThreadMarker, MainThreadOnly};
 use objc2_app_kit::{
-    NSBackingStoreType, NSColor, NSFont, NSScreen, NSTextAlignment, NSTextField, NSWindow,
+    NSBackingStoreType, NSColor, NSFont, NSTextAlignment, NSTextField, NSWindow,
     NSWindowCollectionBehavior, NSWindowStyleMask,
 };
 use objc2_foundation::{NSPoint, NSRect, NSSize, NSString};
@@ -18,23 +18,29 @@ const SIZE: f64 = 24.0;
 /// 카렛과 배지 사이 여백 — 배지는 카렛 위쪽에 놓아 입력 글자를 가리지 않는다.
 const GAP: f64 = 2.0;
 
-/// 주 화면(원점 (0,0), 메뉴 막대가 있는 디스플레이)의 높이.
-/// AX(top-left)↔Cocoa(bottom-left) 전역 좌표 변환의 유일한 기준이다.
-fn primary_screen_height(mtm: MainThreadMarker) -> f64 {
-    let screens = NSScreen::screens(mtm);
-    for i in 0..screens.count() {
-        let frame = screens.objectAtIndex(i).frame();
-        if frame.origin.x == 0.0 && frame.origin.y == 0.0 {
-            return frame.size.height;
-        }
-    }
-    NSScreen::mainScreen(mtm)
-        .map(|s| s.frame().size.height)
-        .unwrap_or(0.0)
+#[repr(C)]
+struct CgRect {
+    x: f64,
+    y: f64,
+    w: f64,
+    h: f64,
+}
+
+#[link(name = "CoreGraphics", kind = "framework")]
+extern "C" {
+    fn CGMainDisplayID() -> u32;
+    fn CGDisplayBounds(display: u32) -> CgRect;
+}
+
+/// 주 디스플레이(메뉴 막대, 전역 원점)의 높이 — AX(top-left)↔Cocoa
+/// (bottom-left) 전역 좌표 변환의 기준이다. CoreGraphics로 직접 얻어
+/// (포커스에 따라 달라지는 NSScreen::mainScreen 대신) 항상 주 디스플레이를
+/// 가리키게 한다.
+fn primary_screen_height() -> f64 {
+    unsafe { CGDisplayBounds(CGMainDisplayID()).h }
 }
 
 pub struct Badge {
-    mtm: MainThreadMarker,
     window: Retained<NSWindow>,
     label: Retained<NSTextField>,
     visible: bool,
@@ -85,7 +91,6 @@ impl Badge {
             }
 
             Self {
-                mtm,
                 window,
                 label,
                 visible: false,
@@ -124,8 +129,17 @@ impl Badge {
         // 좌표계다. 변환 기준은 **주 화면**(원점 0,0, 메뉴 막대) 높이여야
         // 한다 — 배지가 놓인 화면 높이를 쓰면 멀티모니터에서 어긋난다.
         // caret_x는 이미 전역 x라 그대로 두면 올바른 모니터에 놓인다.
-        let screen_h = primary_screen_height(self.mtm);
+        let screen_h = primary_screen_height();
         let origin = NSPoint::new(caret_x, screen_h - y_top - SIZE);
+        // HANENG_DEBUG=1로 실행하면 좌표 진단을 stderr로 출력한다 — 멀티모니터
+        // 위치 문제를 정확히 잡기 위한 것. (터미널에서 실행 시에만 보인다.)
+        if std::env::var_os("HANENG_DEBUG").is_some() {
+            eprintln!(
+                "[haneng] caret(ax top-left)=({caret_x:.0},{caret_top:.0}) h={caret_height:.0} \
+                 primaryH={screen_h:.0} -> window origin(cocoa)=({:.0},{:.0})",
+                origin.x, origin.y
+            );
+        }
         self.window.setFrameOrigin(origin);
         if !self.visible {
             self.window.orderFront(None);
