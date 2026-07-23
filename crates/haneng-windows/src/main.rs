@@ -87,7 +87,8 @@ mod win {
             Ordering::Relaxed,
         );
 
-        indicator::init(current_mode);
+        let alpha = (CONFIG.badge_opacity_percent() as u16 * 255 / 100) as u8;
+        indicator::init(current_mode, alpha);
         // 트레이 아이콘은 메시지 루프가 도는 이 스레드에서 만들어야 하며,
         // 루프가 끝날 때까지 살아 있어야 한다.
         let _tray = crate::tray::install(&ENABLED);

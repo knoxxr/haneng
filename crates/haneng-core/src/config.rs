@@ -108,6 +108,15 @@ impl Config {
         self.disabled_apps.iter().any(|frag| name.contains(frag))
     }
 
+    /// 배지 불투명도 퍼센트 (`badge_opacity`, 30..=100, 기본 80).
+    /// 시야를 가리지 않도록 반투명하게 표시하는 기본값.
+    pub fn badge_opacity_percent(&self) -> u8 {
+        self.extra("badge_opacity")
+            .and_then(|v| v.trim().trim_end_matches('%').parse::<u8>().ok())
+            .unwrap_or(80)
+            .clamp(30, 100)
+    }
+
     /// config.txt 포맷으로 직렬화한다. 모르는 키(extras)도 보존된다.
     pub fn serialize(&self) -> String {
         let mut out = String::from("# haneng 설정 — 데몬 재시작 시 적용\n");
@@ -240,6 +249,31 @@ mod tests {
         assert!(config.app_disabled("com.apple.Terminal"));
         assert!(config.app_disabled("Slack Helper"));
         assert!(!config.app_disabled("Safari"));
+    }
+
+    #[test]
+    fn badge_opacity_defaults_and_clamps() {
+        assert_eq!(Config::default().badge_opacity_percent(), 80);
+        assert_eq!(
+            Config::parse("badge_opacity = 50").badge_opacity_percent(),
+            50
+        );
+        assert_eq!(
+            Config::parse("badge_opacity = 90%").badge_opacity_percent(),
+            90
+        );
+        assert_eq!(
+            Config::parse("badge_opacity = 5").badge_opacity_percent(),
+            30
+        );
+        assert_eq!(
+            Config::parse("badge_opacity = 200").badge_opacity_percent(),
+            100
+        );
+        assert_eq!(
+            Config::parse("badge_opacity = x").badge_opacity_percent(),
+            80
+        );
     }
 
     #[test]

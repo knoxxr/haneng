@@ -5,6 +5,12 @@
 
 ## [Unreleased]
 
+### Added
+- 배지 **불투명도(투명도) 조절** — 시야를 덜 가리도록 기본 80% 반투명으로
+  표시. 설정 창의 슬라이더 또는 `badge_opacity = 30~100`(퍼센트)로 조절.
+  Windows는 layered 창 알파, macOS는 `setAlphaValue`, Linux는
+  `_NET_WM_WINDOW_OPACITY`(합성기 필요)로 적용.
+
 ## [0.6.0] - 2026-07-23
 
 ### Changed

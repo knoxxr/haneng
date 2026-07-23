@@ -81,6 +81,8 @@ mod macos {
             cfg.extra("initial_mode") == Some("korean"),
             Ordering::Relaxed,
         );
+        // 시야를 가리지 않도록 배지를 반투명하게 (기본 80%).
+        let opacity = cfg.badge_opacity_percent() as f64 / 100.0;
 
         // 손쉬운 사용 권한 요청 (없으면 텍스트 감지 불가 → 배지가 안 뜬다).
         if !ax::accessibility_trusted(true) {
@@ -104,7 +106,7 @@ mod macos {
             Event::NewEvents(StartCause::Init) => {
                 let mtm =
                     objc2::MainThreadMarker::new().expect("event loop runs on the main thread");
-                *badge.borrow_mut() = Some(Badge::new(mtm));
+                *badge.borrow_mut() = Some(Badge::new(mtm, opacity));
                 *tray.borrow_mut() = Some(crate::tray::install(&ENABLED));
                 *control_flow = ControlFlow::WaitUntil(Instant::now() + POLL);
             }

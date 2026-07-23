@@ -75,6 +75,8 @@ struct SettingsApp {
     show_badge: bool,
     /// 질의 무응답 환경의 시작 모드: None=자동, Some(true)=한글, Some(false)=영문.
     initial_mode: Option<bool>,
+    /// 배지 불투명도 퍼센트 (30~100).
+    opacity: u8,
     status: String,
     update: Arc<Mutex<UpdateState>>,
 }
@@ -88,10 +90,12 @@ impl SettingsApp {
             Some("english") => Some(false),
             _ => None,
         };
+        let opacity = config.badge_opacity_percent();
         Self {
             config,
             show_badge,
             initial_mode,
+            opacity,
             status: String::new(),
             update: Arc::new(Mutex::new(UpdateState::Idle)),
         }
@@ -138,6 +142,8 @@ impl SettingsApp {
                 Some(false) => "english",
             },
         );
+        self.config
+            .set_extra("badge_opacity", &self.opacity.to_string());
         let result = config::save_config(&self.config);
         self.status = match result {
             Ok(()) => format!(
@@ -167,6 +173,14 @@ impl eframe::App for SettingsApp {
                 ui.radio_value(&mut self.initial_mode, Some(true), "한글");
                 ui.radio_value(&mut self.initial_mode, Some(false), "영문");
             });
+            ui.add_space(12.0);
+
+            ui.label("배지 불투명도 (낮을수록 투명 — 시야를 덜 가림)");
+            ui.add(
+                eframe::egui::Slider::new(&mut self.opacity, 30..=100)
+                    .suffix("%")
+                    .step_by(5.0),
+            );
             ui.add_space(12.0);
 
             ui.separator();

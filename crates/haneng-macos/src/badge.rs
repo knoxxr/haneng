@@ -27,7 +27,8 @@ pub struct Badge {
 }
 
 impl Badge {
-    pub fn new(mtm: MainThreadMarker) -> Self {
+    /// `opacity`는 0.0(투명)~1.0(불투명) — 시야를 가리지 않도록 반투명.
+    pub fn new(mtm: MainThreadMarker, opacity: f64) -> Self {
         unsafe {
             let rect = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(SIZE, SIZE));
             let window = NSWindow::initWithContentRect_styleMask_backing_defer(
@@ -38,6 +39,7 @@ impl Badge {
                 false,
             );
             window.setOpaque(false);
+            window.setAlphaValue(opacity);
             window.setHasShadow(false);
             window.setIgnoresMouseEvents(true);
             // 상태 항목보다 위, 모든 스페이스·전체화면 위에 뜨되 활성화하지 않음.

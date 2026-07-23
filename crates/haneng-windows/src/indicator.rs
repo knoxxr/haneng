@@ -73,7 +73,8 @@ fn wide(s: &str) -> Vec<u16> {
 }
 
 /// 배지 창 생성 (메시지 루프 스레드에서 한 번 호출).
-pub fn init(mode_source: fn() -> Mode) {
+/// `alpha`는 창 불투명도 (0=완전 투명, 255=불투명).
+pub fn init(mode_source: fn() -> Mode, alpha: u8) {
     let _ = MODE_SOURCE.set(mode_source);
     unsafe {
         let hinstance = GetModuleHandleW(std::ptr::null());
@@ -102,7 +103,7 @@ pub fn init(mode_source: fn() -> Mode) {
         if hwnd.is_null() {
             return;
         }
-        SetLayeredWindowAttributes(hwnd, 0, 235, LWA_ALPHA);
+        SetLayeredWindowAttributes(hwnd, 0, alpha, LWA_ALPHA);
         IBEAM_CURSOR.store(
             LoadCursorW(std::ptr::null_mut(), IDC_IBEAM) as usize,
             Ordering::Relaxed,

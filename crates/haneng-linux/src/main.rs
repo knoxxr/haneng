@@ -54,9 +54,10 @@ mod linux {
     use x11rb::protocol::record::{self, ConnectionExt as _};
     use x11rb::protocol::xfixes::ConnectionExt as _;
     use x11rb::protocol::xproto::{
-        ConfigureWindowAux, ConnectionExt as _, CreateGCAux, CreateWindowAux, EventMask,
-        ImageFormat, KeyButMask, WindowClass,
+        AtomEnum, ConfigureWindowAux, ConnectionExt as _, CreateGCAux, CreateWindowAux, EventMask,
+        ImageFormat, KeyButMask, PropMode, WindowClass,
     };
+    use x11rb::wrapper::ConnectionExt as _;
 
     static KOREAN: AtomicBool = AtomicBool::new(false);
 
@@ -115,6 +116,19 @@ mod linux {
         )?;
         let gc = conn.generate_id()?;
         conn.create_gc(gc, win, &CreateGCAux::new())?;
+
+        // 반투명: 합성기(compositor)가 있으면 _NET_WM_WINDOW_OPACITY를 존중한다.
+        // 없으면 불투명(무시)으로 graceful degrade.
+        if let Ok(reply) = conn.intern_atom(false, b"_NET_WM_WINDOW_OPACITY")?.reply() {
+            let opacity = (cfg.badge_opacity_percent() as u64 * 0xFFFF_FFFF / 100) as u32;
+            let _ = conn.change_property32(
+                PropMode::REPLACE,
+                win,
+                reply.atom,
+                AtomEnum::CARDINAL,
+                &[opacity],
+            );
+        }
         conn.flush()?;
 
         // 한/영 토글 키 관찰 스레드 (모드 추적).
