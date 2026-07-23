@@ -5,8 +5,8 @@
 //! - 표시 조건(트리거): 시스템 커서가 I-빔인지 비교 (앱 무관 표준 기법.
 //!   커스텀 커서 테마에서는 감지되지 않을 수 있다 — 알려진 한계).
 //! - 표시 위치: 포커스 창의 **카렛 위치**(`ime::caret_screen_rect`) 위쪽에
-//!   두어 입력 글자를 가리지 않는다. 카렛을 못 읽는 앱(크롬·Electron 등)은
-//!   **마우스 커서 옆**으로 폴백해 어디서든 보이게 한다.
+//!   두어 입력 글자를 가리지 않는다. 카렛을 못 읽는 앱(표준 Win32 카렛이
+//!   없는 크롬·Electron 등)에서는 배지를 숨긴다(마우스에 표시하지 않음).
 //! - 배지 창: 최상위·비활성·클릭 통과(layered) 팝업. 메시지 루프 스레드
 //!   에서 만들어지고 같은 스레드의 LL 마우스 훅이 위치를 갱신한다.
 //! - LL 마우스 훅은 모든 마우스 이동마다 불리므로 갱신을 50ms로 스로틀.
@@ -121,31 +121,18 @@ fn refresh_mode(hwnd: HWND) -> Mode {
     mode
 }
 
-/// 배지 창 위치를 정한다. 카렛을 읽을 수 있으면 카렛 바로 위(넘치면 아래),
-/// 못 읽는 앱(크롬·Electron 등)은 **마우스 커서 옆**으로 폴백한다.
-/// 위치를 전혀 못 구하면 `false`(호출자가 숨긴다).
+/// 배지 창을 **카렛 바로 위**(넘치면 아래)로 옮긴다. 카렛을 못 읽으면
+/// `false`(호출자가 숨긴다) — 마우스 위치에는 표시하지 않는다.
 unsafe fn place_badge(hwnd: HWND) -> bool {
-    let (x, y) = if let Some((left, top, bottom)) = crate::ime::caret_screen_rect() {
-        let above = top - BADGE_SIZE - GAP;
-        let y = if above >= 0 { above } else { bottom + GAP };
-        (left.max(0), y)
-    } else {
-        // 폴백: 마우스 커서 오른쪽 아래.
-        const MOUSE_OFFSET: i32 = 16;
-        let mut info: CURSORINFO = zeroed();
-        info.cbSize = size_of::<CURSORINFO>() as u32;
-        if GetCursorInfo(&mut info) == 0 {
-            return false;
-        }
-        (
-            info.ptScreenPos.x + MOUSE_OFFSET,
-            info.ptScreenPos.y + MOUSE_OFFSET,
-        )
+    let Some((left, top, bottom)) = crate::ime::caret_screen_rect() else {
+        return false;
     };
+    let above = top - BADGE_SIZE - GAP;
+    let y = if above >= 0 { above } else { bottom + GAP };
     SetWindowPos(
         hwnd,
         HWND_TOPMOST,
-        x,
+        left.max(0),
         y,
         0,
         0,

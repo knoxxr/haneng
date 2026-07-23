@@ -120,25 +120,6 @@ impl Badge {
         }
     }
 
-    /// 카렛을 읽을 수 없는 앱(브라우저·Electron 등)의 폴백: 마우스 커서
-    /// 오른쪽 아래에 표시한다. 최소한 입력 지점 근처에는 보이게 한다.
-    pub fn show_at_mouse(&mut self, mouse_x: f64, mouse_y_top: f64, mode: Mode) {
-        const OFFSET: f64 = 16.0;
-        self.apply_mode(mode);
-        let screen_h = self
-            .window
-            .screen()
-            .or_else(|| objc2_app_kit::NSScreen::mainScreen(self.mtm))
-            .map(|s| s.frame().size.height)
-            .unwrap_or(0.0);
-        let origin = NSPoint::new(mouse_x + OFFSET, screen_h - (mouse_y_top + OFFSET) - SIZE);
-        self.window.setFrameOrigin(origin);
-        if !self.visible {
-            self.window.orderFront(None);
-            self.visible = true;
-        }
-    }
-
     pub fn hide(&mut self) {
         if self.visible {
             self.window.orderOut(None);

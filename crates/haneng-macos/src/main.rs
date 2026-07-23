@@ -135,15 +135,18 @@ mod macos {
             badge.hide();
             return;
         };
-        // 트리거는 마우스가 텍스트 입력 위(hover)일 때. 위치는 마우스가 아니라
-        // 그 입력의 카렛. 카렛을 못 읽으면(포커스 없음 등) 숨긴다.
+        // 트리거: 마우스가 텍스트 입력 위(hover). 위치: 포커스 요소의 카렛.
+        // 카렛을 못 읽으면 숨긴다 — 마우스 위치에는 표시하지 않는다.
         if ax::text_input_at(pos.x, pos.y) {
-            let mode = current_mode();
-            // 카렛을 읽을 수 있으면 카렛에, 없으면(브라우저 등) 마우스 옆에.
-            if let Some(rect) = ax::caret_bounds_at(pos.x, pos.y) {
-                badge.show_at_caret(rect.origin.x, rect.origin.y, rect.size.height, mode);
+            if let Some(rect) = ax::focused_caret_bounds() {
+                badge.show_at_caret(
+                    rect.origin.x,
+                    rect.origin.y,
+                    rect.size.height,
+                    current_mode(),
+                );
             } else {
-                badge.show_at_mouse(pos.x, pos.y, mode);
+                badge.hide();
             }
         } else {
             badge.hide();

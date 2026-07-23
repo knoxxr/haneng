@@ -156,23 +156,29 @@ unsafe fn bounds_for_range(
     }
 }
 
-/// 화면 좌표(top-left 원점) 아래 텍스트 입력의 **카렛 사각형**을 돌려준다.
-/// 카렛(선택 범위 시작)의 화면 위치·높이를 얻는다. 카렛을 못 읽으면 `None`.
+/// **포커스된** 텍스트 요소의 캐럿 사각형(top-left 원점 화면 좌표)을 돌려준다.
+/// 카렛을 못 읽으면 `None`.
 ///
-/// 순서: 요소 조회 → AXSelectedTextRange(현재 캐럿/선택) → AXBoundsForRange.
+/// 카렛은 마우스 아래 요소가 아니라 **포커스된 요소**에 있다. 마우스 아래
+/// 요소(`AXUIElementCopyElementAtPosition`)는 포커스가 아니거나 하위 요소라
+/// `AXSelectedTextRange`가 없을 수 있어, 시스템 전역의 AXFocusedUIElement를
+/// 쓴다. 순서: 포커스 요소 → AXSelectedTextRange → AXBoundsForRange.
 /// 길이 0 범위가 사각형을 안 주는 앱을 위해 길이 1 범위로 폴백한다.
-pub fn caret_bounds_at(x: f64, y: f64) -> Option<CGRect> {
+pub fn focused_caret_bounds() -> Option<CGRect> {
     unsafe {
         let system = AXUIElementCreateSystemWide();
         if system.is_null() {
             return None;
         }
-        let mut element: AXUIElementRef = std::ptr::null_mut();
-        let err = AXUIElementCopyElementAtPosition(system, x as f32, y as f32, &mut element);
+        let focused_key = CFString::new("AXFocusedUIElement");
+        let mut focused: CFTypeRef = std::ptr::null_mut();
+        let err =
+            AXUIElementCopyAttributeValue(system, focused_key.as_concrete_TypeRef(), &mut focused);
         CFRelease(system as CFTypeRef);
-        if err != AX_SUCCESS || element.is_null() {
+        if err != AX_SUCCESS || focused.is_null() {
             return None;
         }
+        let element = focused as AXUIElementRef;
 
         // 현재 선택/캐럿 범위.
         let sel_key = CFString::new("AXSelectedTextRange");
