@@ -57,12 +57,19 @@ pub fn query_korean_mode() -> Option<bool> {
 }
 
 /// 포커스 창의 텍스트 카렛(입력 커서) 위치를 화면 좌표 `(left, top, bottom)`로
-/// 돌려준다. `None` = 유효한 카렛 없음.
+/// 돌려준다. `None` = 유효한 카렛 없음(배지를 숨기는 근거).
 ///
-/// 표준 Win32 카렛을 만드는 앱(메모장·Win32/WinForms 대화상자 등)에서만
-/// 동작한다. 자체 카렛을 그리는 앱(크롬·Electron·일부 UWP)은 `hwndCaret`이
-/// 비어 있어 `None` — 배지를 숨기는 근거가 된다.
+/// 1) 표준 Win32 카렛(`GUITHREADINFO.rcCaret`)을 먼저 읽고 —
+///    메모장·Win32/WinForms 대화상자 등에서 가장 빠르고 정확하다.
+/// 2) 그게 없으면(크롬·Electron·일부 UWP는 자체 카렛을 그려 `hwndCaret`이
+///    비어 있다) UI Automation TextPattern의 선택 영역 사각형으로 폴백한다
+///    (macOS 데몬이 AXSelectedTextRange/AXBoundsForRange로 읽는 것과 동형).
 pub fn caret_screen_rect() -> Option<(i32, i32, i32)> {
+    caret_via_win32().or_else(|| unsafe { caret_via_uia() })
+}
+
+/// 표준 Win32 카렛(`GUITHREADINFO.rcCaret`) → 화면 좌표.
+fn caret_via_win32() -> Option<(i32, i32, i32)> {
     unsafe {
         let foreground = GetForegroundWindow();
         if foreground.is_null() {
@@ -95,4 +102,103 @@ pub fn caret_screen_rect() -> Option<(i32, i32, i32)> {
         }
         Some((top_left.x, top_left.y, bottom.y))
     }
+}
+
+use std::cell::RefCell;
+use windows::core::Interface;
+use windows::Win32::System::Com::{
+    CoCreateInstance, CoInitializeEx, SafeArrayAccessData, SafeArrayDestroy, SafeArrayGetLBound,
+    SafeArrayGetUBound, SafeArrayUnaccessData, CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED,
+    SAFEARRAY,
+};
+use windows::Win32::UI::Accessibility::{
+    CUIAutomation, IUIAutomation, IUIAutomationTextPattern, IUIAutomationTextRange,
+    TextUnit_Character, UIA_DocumentControlTypeId, UIA_EditControlTypeId, UIA_TextPatternId,
+};
+
+thread_local! {
+    /// 폴링 스레드(메시지 루프)에서만 쓰는 UIA 인스턴스 — 최초 1회 생성 후 재사용.
+    /// IUIAutomation은 Send/Sync가 아니므로 스레드 로컬에 둔다.
+    static UIA: RefCell<Option<IUIAutomation>> = const { RefCell::new(None) };
+}
+
+/// UI Automation으로 포커스 요소의 캐럿(선택 영역 시작) 사각형을 읽는다.
+///
+/// Win32 카렛이 없는 앱(크롬 등) 전용 폴백. 텍스트 패턴이 없는 요소(바탕화면
+/// 등)에서는 각 단계가 자연스럽게 실패해 `None` → 배지를 숨긴다.
+///
+/// 주의: 다른 프로세스에 대한 크로스 프로세스 COM 호출이라 대상이 바쁘면
+/// 잠깐 지연될 수 있다(Win32 카렛 질의처럼 타임아웃을 걸 API가 없다).
+/// 표준 카렛이 있는 앱은 위 `caret_via_win32`에서 이미 처리되므로, 이 경로는
+/// 카렛을 못 읽는 앱에서만 탄다.
+unsafe fn caret_via_uia() -> Option<(i32, i32, i32)> {
+    UIA.with(|cell| {
+        let mut slot = cell.borrow_mut();
+        if slot.is_none() {
+            // 이 스레드는 메시지 루프(STA)다. 이미 초기화돼 있으면 실패를
+            // 무시한다 — COM만 살아 있으면 CoCreateInstance는 동작한다.
+            let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+            match CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER) {
+                Ok(a) => *slot = Some(a),
+                Err(_) => return None,
+            }
+        }
+        let uia = slot.as_ref()?;
+
+        let element = uia.GetFocusedElement().ok()?;
+        // 편집 가능한 텍스트 필드에서만 배지를 띄운다. 편집 컨트롤(Edit)이나
+        // 리치 편집기(Document)만 허용 — 일반 웹 페이지의 단순 텍스트 선택에서
+        // 배지가 뜨는 오탐을 줄인다.
+        let ctype = element.CurrentControlType().ok()?;
+        if ctype != UIA_EditControlTypeId && ctype != UIA_DocumentControlTypeId {
+            return None;
+        }
+        // 텍스트 패턴 미지원이면 GetCurrentPattern이 널 → from_abi가 Err 처리.
+        let pattern: IUIAutomationTextPattern =
+            element.GetCurrentPattern(UIA_TextPatternId).ok()?.cast().ok()?;
+        let selection = pattern.GetSelection().ok()?;
+        if selection.Length().ok()? < 1 {
+            return None;
+        }
+        let range = selection.GetElement(0).ok()?;
+
+        // 접힌 캐럿(선택 없음)은 사각형이 빌 수 있다 → 한 글자만큼 넓혀 재시도.
+        if let Some(rect) = first_rect(&range) {
+            return Some(rect);
+        }
+        range.ExpandToEnclosingUnit(TextUnit_Character).ok()?;
+        first_rect(&range)
+    })
+}
+
+/// 텍스트 범위의 첫 경계 사각형을 화면 좌표 `(left, top, bottom)`로.
+/// GetBoundingRectangles는 [left, top, width, height, ...] double SAFEARRAY.
+unsafe fn first_rect(range: &IUIAutomationTextRange) -> Option<(i32, i32, i32)> {
+    let sa = range.GetBoundingRectangles().ok()?;
+    if sa.is_null() {
+        return None;
+    }
+    let rect = read_first_rect(sa);
+    let _ = SafeArrayDestroy(sa);
+    rect
+}
+
+unsafe fn read_first_rect(sa: *const SAFEARRAY) -> Option<(i32, i32, i32)> {
+    let lbound = SafeArrayGetLBound(sa, 1).ok()?;
+    let ubound = SafeArrayGetUBound(sa, 1).ok()?;
+    if ubound - lbound + 1 < 4 {
+        return None; // 사각형 하나도 없음.
+    }
+    let mut data: *mut std::ffi::c_void = std::ptr::null_mut();
+    SafeArrayAccessData(sa, &mut data).ok()?;
+    let f = data as *const f64;
+    let left = *f;
+    let top = *f.add(1);
+    let height = *f.add(3);
+    let _ = SafeArrayUnaccessData(sa);
+    let l = left.round() as i32;
+    let t = top.round() as i32;
+    let b = (top + height).round() as i32;
+    // 높이가 0/음수면 최소 1px로 — 호출자는 top<bottom을 기대한다.
+    Some((l, t, if b > t { b } else { t + 1 }))
 }
