@@ -15,8 +15,8 @@ use objc2_foundation::{NSPoint, NSRect, NSSize, NSString};
 use crate::Mode;
 
 const SIZE: f64 = 24.0;
-/// 커서 기준 오프셋 (오른쪽 아래).
-const OFFSET: f64 = 18.0;
+/// 카렛과 배지 사이 여백 — 배지는 카렛 위쪽에 놓아 입력 글자를 가리지 않는다.
+const GAP: f64 = 2.0;
 
 pub struct Badge {
     mtm: MainThreadMarker,
@@ -92,9 +92,17 @@ impl Badge {
         self.label.setStringValue(&NSString::from_str(text));
     }
 
-    /// 커서 위치(top-left 원점)에 모드를 갱신해 표시한다.
-    pub fn show_at(&mut self, screen_x: f64, screen_y_top: f64, mode: Mode) {
+    /// 카렛 사각형(top-left 원점 화면 좌표) 바로 위에 모드를 갱신해 표시한다.
+    /// 화면 위로 넘치면 카렛 아래쪽으로 뒤집는다.
+    pub fn show_at_caret(&mut self, caret_x: f64, caret_top: f64, caret_height: f64, mode: Mode) {
         self.apply_mode(mode);
+        // top-left 기준: 카렛 위쪽에 두되 화면 밖으로 나가면 아래로.
+        let y_top_above = caret_top - SIZE - GAP;
+        let y_top = if y_top_above >= 0.0 {
+            y_top_above
+        } else {
+            caret_top + caret_height + GAP
+        };
         // AppKit은 bottom-left 원점 — 메인 화면 높이로 뒤집는다.
         let screen_h = self
             .window
@@ -102,7 +110,7 @@ impl Badge {
             .or_else(|| objc2_app_kit::NSScreen::mainScreen(self.mtm))
             .map(|s| s.frame().size.height)
             .unwrap_or(0.0);
-        let origin = NSPoint::new(screen_x + OFFSET, screen_h - screen_y_top - OFFSET - SIZE);
+        let origin = NSPoint::new(caret_x, screen_h - y_top - SIZE);
         self.window.setFrameOrigin(origin);
         if !self.visible {
             self.window.orderFront(None);

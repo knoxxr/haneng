@@ -5,6 +5,18 @@
 
 ## [Unreleased]
 
+### Changed
+- 배지를 **마우스 커서 옆이 아니라 입력 카렛(입력 커서) 바로 위**에 표시한다
+  — 입력 글자를 가리지 않게 카렛 위쪽(화면 위로 넘치면 아래쪽)에 놓는다.
+  표시 조건은 그대로 "텍스트 입력 위에 마우스 hover"이며, 입력 중 마우스가
+  멈춰 있어도 카렛을 따라 위치가 갱신된다.
+  - Windows: 포커스 컨트롤의 `GUITHREADINFO.rcCaret`.
+  - macOS: Accessibility `AXSelectedTextRange` + `AXBoundsForRange`.
+  - 카렛 위치를 읽을 수 없는 앱(크롬·Electron 등 자체 카렛 렌더링)에서는
+    배지를 표시하지 않는다.
+  - Linux(X11)는 임의 앱의 카렛 위치 질의 API가 없어 종전대로 마우스 기준
+    위치를 유지한다.
+
 ## [0.5.1] - 2026-07-20
 
 ### Fixed
