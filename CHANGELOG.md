@@ -5,6 +5,12 @@
 
 ## [Unreleased]
 
+### Changed
+- macOS 멀티모니터: 주 디스플레이 높이 기준을 CoreGraphics
+  `CGMainDisplayID`로 확정(포커스 따라 흔들릴 수 있는 경로 제거).
+- 진단: `HANENG_DEBUG=1` 실행 시 카렛 AX 좌표·주 화면 높이·창 위치를
+  stderr로 출력 (멀티모니터 위치 문제 진단용).
+
 ## [0.8.3] - 2026-07-23
 
 ### Changed
