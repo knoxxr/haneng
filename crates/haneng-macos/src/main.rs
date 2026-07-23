@@ -72,6 +72,11 @@ mod macos {
     }
 
     pub fn run() {
+        // 데몬은 하나만 — 이미 실행 중이면 종료.
+        if !haneng_core::single_instance::acquire("hanengd") {
+            eprintln!("hanengd가 이미 실행 중입니다.");
+            return;
+        }
         let cfg = config::load_config();
         ENABLED.store(
             cfg.extra("hover_indicator") != Some("off"),

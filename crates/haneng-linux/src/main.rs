@@ -77,6 +77,11 @@ mod linux {
     }
 
     pub fn run() -> Result<(), Box<dyn Error>> {
+        // 데몬은 하나만 — 이미 실행 중이면 종료.
+        if !haneng_core::single_instance::acquire("hanengl") {
+            eprintln!("hanengl이 이미 실행 중입니다.");
+            return Ok(());
+        }
         let cfg = config::load_config();
         KOREAN.store(
             cfg.extra("initial_mode") == Some("korean"),

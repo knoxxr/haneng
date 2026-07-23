@@ -27,6 +27,8 @@ mod lexicon_data;
 #[rustfmt::skip]
 mod sebeolsik_data;
 pub mod plan;
+#[cfg(unix)]
+pub mod single_instance;
 pub mod sync;
 pub mod tracker;
 

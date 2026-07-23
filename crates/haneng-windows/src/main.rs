@@ -77,7 +77,27 @@ mod win {
         }
     }
 
+    /// 데몬은 하나만 — 네임드 뮤텍스로 중복 실행을 막는다.
+    /// 이미 실행 중이면 false (호출자 즉시 종료). 뮤텍스 핸들은 프로세스가
+    /// 끝날 때까지 유지되도록 닫지 않는다.
+    fn single_instance() -> bool {
+        use windows_sys::Win32::Foundation::{GetLastError, ERROR_ALREADY_EXISTS};
+        use windows_sys::Win32::System::Threading::CreateMutexW;
+        let name: Vec<u16> = "haneng-indicator-singleton\0".encode_utf16().collect();
+        unsafe {
+            let handle = CreateMutexW(std::ptr::null(), 1, name.as_ptr());
+            if handle.is_null() {
+                return true; // 뮤텍스 생성 실패 시 과잉 차단 방지.
+            }
+            GetLastError() != ERROR_ALREADY_EXISTS
+        }
+    }
+
     pub fn run() {
+        if !single_instance() {
+            eprintln!("hanengw가 이미 실행 중입니다.");
+            return;
+        }
         LazyLock::force(&CONFIG);
         let initial =
             ime::query_korean_mode().unwrap_or(CONFIG.extra("initial_mode") == Some("korean"));

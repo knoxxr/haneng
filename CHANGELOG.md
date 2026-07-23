@@ -5,6 +5,14 @@
 
 ## [Unreleased]
 
+### Added
+- **단일 인스턴스 보장**: 데몬을 두 번 실행하면 뒤엣것이 즉시 종료된다
+  (Windows 네임드 뮤텍스, macOS/Linux flock 잠금 파일).
+
+### Changed
+- Windows 업데이트: 설치 전 기존 데몬(hanengw)을 종료하고 MSI를 자동
+  설치하며, 설치 완료 시 MSI가 새 데몬을 다시 띄운다 (기존 동작 확인·문서화).
+
 ## [0.7.1] - 2026-07-23
 
 ### Fixed
