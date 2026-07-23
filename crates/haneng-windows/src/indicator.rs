@@ -4,9 +4,9 @@
 //!
 //! - 표시 조건(트리거): 시스템 커서가 I-빔인지 비교 (앱 무관 표준 기법.
 //!   커스텀 커서 테마에서는 감지되지 않을 수 있다 — 알려진 한계).
-//! - 표시 위치: 마우스가 아니라 포커스 창의 **카렛 위치**
-//!   (`ime::caret_screen_rect`). 입력 글자를 가리지 않게 카렛 위쪽에 둔다.
-//!   카렛을 못 읽는 앱(크롬·Electron 등)에서는 배지를 숨긴다.
+//! - 표시 위치: 포커스 창의 **카렛 위치**(`ime::caret_screen_rect`) 위쪽에
+//!   두어 입력 글자를 가리지 않는다. 카렛을 못 읽는 앱(크롬·Electron 등)은
+//!   **마우스 커서 옆**으로 폴백해 어디서든 보이게 한다.
 //! - 배지 창: 최상위·비활성·클릭 통과(layered) 팝업. 메시지 루프 스레드
 //!   에서 만들어지고 같은 스레드의 LL 마우스 훅이 위치를 갱신한다.
 //! - LL 마우스 훅은 모든 마우스 이동마다 불리므로 갱신을 50ms로 스로틀.
@@ -121,15 +121,27 @@ fn refresh_mode(hwnd: HWND) -> Mode {
     mode
 }
 
-/// 카렛 위치에 배지 창을 옮긴다. 카렛을 못 읽으면 `false` (호출자가 숨긴다).
-/// 카렛 바로 위에 두되 화면 위로 넘치면 아래쪽으로 뒤집는다.
-unsafe fn place_at_caret(hwnd: HWND) -> bool {
-    let Some((left, top, bottom)) = crate::ime::caret_screen_rect() else {
-        return false;
+/// 배지 창 위치를 정한다. 카렛을 읽을 수 있으면 카렛 바로 위(넘치면 아래),
+/// 못 읽는 앱(크롬·Electron 등)은 **마우스 커서 옆**으로 폴백한다.
+/// 위치를 전혀 못 구하면 `false`(호출자가 숨긴다).
+unsafe fn place_badge(hwnd: HWND) -> bool {
+    let (x, y) = if let Some((left, top, bottom)) = crate::ime::caret_screen_rect() {
+        let above = top - BADGE_SIZE - GAP;
+        let y = if above >= 0 { above } else { bottom + GAP };
+        (left.max(0), y)
+    } else {
+        // 폴백: 마우스 커서 오른쪽 아래.
+        const MOUSE_OFFSET: i32 = 16;
+        let mut info: CURSORINFO = zeroed();
+        info.cbSize = size_of::<CURSORINFO>() as u32;
+        if GetCursorInfo(&mut info) == 0 {
+            return false;
+        }
+        (
+            info.ptScreenPos.x + MOUSE_OFFSET,
+            info.ptScreenPos.y + MOUSE_OFFSET,
+        )
     };
-    let x = left.max(0);
-    let above = top - BADGE_SIZE - GAP;
-    let y = if above >= 0 { above } else { bottom + GAP };
     SetWindowPos(
         hwnd,
         HWND_TOPMOST,
@@ -173,10 +185,10 @@ pub fn on_mouse_move() {
         }
         let over_text = info.flags == CURSOR_SHOWING
             && info.hCursor as usize == IBEAM_CURSOR.load(Ordering::Relaxed);
-        // I-빔 위 + 카렛을 읽을 수 있을 때만 표시. 둘 중 하나라도 아니면 숨긴다.
+        // I-빔 위일 때 표시 (위치는 카렛, 없으면 마우스 폴백).
         if over_text {
             refresh_mode(hwnd);
-            if place_at_caret(hwnd) {
+            if place_badge(hwnd) {
                 let first_show = !VISIBLE.swap(true, Ordering::Relaxed);
                 if first_show {
                     InvalidateRect(hwnd, std::ptr::null(), 1);
@@ -202,7 +214,7 @@ unsafe extern "system" fn wnd_proc(
             refresh_mode(hwnd);
             // 입력 중 마우스가 멈춰 있어도 카렛을 따라 위치를 갱신하고,
             // 카렛이 사라졌으면(포커스 상실 등) 숨긴다.
-            if !place_at_caret(hwnd) {
+            if !place_badge(hwnd) {
                 hide(hwnd);
             }
         }
