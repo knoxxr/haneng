@@ -7,7 +7,7 @@
 use objc2::rc::Retained;
 use objc2::{MainThreadMarker, MainThreadOnly};
 use objc2_app_kit::{
-    NSBackingStoreType, NSColor, NSFont, NSTextAlignment, NSTextField, NSWindow,
+    NSBackingStoreType, NSColor, NSFont, NSScreen, NSTextAlignment, NSTextField, NSWindow,
     NSWindowCollectionBehavior, NSWindowStyleMask,
 };
 use objc2_foundation::{NSPoint, NSRect, NSSize, NSString};
@@ -17,6 +17,21 @@ use crate::Mode;
 const SIZE: f64 = 24.0;
 /// 카렛과 배지 사이 여백 — 배지는 카렛 위쪽에 놓아 입력 글자를 가리지 않는다.
 const GAP: f64 = 2.0;
+
+/// 주 화면(원점 (0,0), 메뉴 막대가 있는 디스플레이)의 높이.
+/// AX(top-left)↔Cocoa(bottom-left) 전역 좌표 변환의 유일한 기준이다.
+fn primary_screen_height(mtm: MainThreadMarker) -> f64 {
+    let screens = NSScreen::screens(mtm);
+    for i in 0..screens.count() {
+        let frame = screens.objectAtIndex(i).frame();
+        if frame.origin.x == 0.0 && frame.origin.y == 0.0 {
+            return frame.size.height;
+        }
+    }
+    NSScreen::mainScreen(mtm)
+        .map(|s| s.frame().size.height)
+        .unwrap_or(0.0)
+}
 
 pub struct Badge {
     mtm: MainThreadMarker,
@@ -105,13 +120,11 @@ impl Badge {
         } else {
             caret_top + caret_height + GAP
         };
-        // AppKit은 bottom-left 원점 — 메인 화면 높이로 뒤집는다.
-        let screen_h = self
-            .window
-            .screen()
-            .or_else(|| objc2_app_kit::NSScreen::mainScreen(self.mtm))
-            .map(|s| s.frame().size.height)
-            .unwrap_or(0.0);
+        // AX는 top-left 원점(주 화면 기준), AppKit은 bottom-left 원점의 전역
+        // 좌표계다. 변환 기준은 **주 화면**(원점 0,0, 메뉴 막대) 높이여야
+        // 한다 — 배지가 놓인 화면 높이를 쓰면 멀티모니터에서 어긋난다.
+        // caret_x는 이미 전역 x라 그대로 두면 올바른 모니터에 놓인다.
+        let screen_h = primary_screen_height(self.mtm);
         let origin = NSPoint::new(caret_x, screen_h - y_top - SIZE);
         self.window.setFrameOrigin(origin);
         if !self.visible {
