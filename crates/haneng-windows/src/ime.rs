@@ -107,9 +107,11 @@ fn caret_via_win32() -> Option<(i32, i32, i32)> {
 use std::cell::RefCell;
 use windows::core::Interface;
 use windows::Win32::System::Com::{
-    CoCreateInstance, CoInitializeEx, SafeArrayAccessData, SafeArrayDestroy, SafeArrayGetLBound,
-    SafeArrayGetUBound, SafeArrayUnaccessData, CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED,
-    SAFEARRAY,
+    CoCreateInstance, CoInitializeEx, CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED, SAFEARRAY,
+};
+use windows::Win32::System::Ole::{
+    SafeArrayAccessData, SafeArrayDestroy, SafeArrayGetLBound, SafeArrayGetUBound,
+    SafeArrayUnaccessData,
 };
 use windows::Win32::UI::Accessibility::{
     CUIAutomation, IUIAutomation, IUIAutomationTextPattern, IUIAutomationTextRange,
@@ -154,8 +156,11 @@ unsafe fn caret_via_uia() -> Option<(i32, i32, i32)> {
             return None;
         }
         // 텍스트 패턴 미지원이면 GetCurrentPattern이 널 → from_abi가 Err 처리.
-        let pattern: IUIAutomationTextPattern =
-            element.GetCurrentPattern(UIA_TextPatternId).ok()?.cast().ok()?;
+        let pattern: IUIAutomationTextPattern = element
+            .GetCurrentPattern(UIA_TextPatternId)
+            .ok()?
+            .cast()
+            .ok()?;
         let selection = pattern.GetSelection().ok()?;
         if selection.Length().ok()? < 1 {
             return None;

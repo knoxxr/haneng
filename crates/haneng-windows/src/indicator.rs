@@ -146,7 +146,11 @@ unsafe fn place_badge(hwnd: HWND) -> bool {
     // 좌표의 보조 모니터에서도 카렛을 따라가도록 0이 아니라 모니터로 클램프).
     let (mon_left, mon_top, mon_right, mon_bottom) = monitor_bounds(left, top);
     let above = top - BADGE_SIZE - GAP;
-    let y = if above >= mon_top { above } else { bottom + GAP };
+    let y = if above >= mon_top {
+        above
+    } else {
+        bottom + GAP
+    };
     let x = left.clamp(mon_left, (mon_right - BADGE_SIZE).max(mon_left));
     let y = y.clamp(mon_top, (mon_bottom - BADGE_SIZE).max(mon_top));
     SetWindowPos(

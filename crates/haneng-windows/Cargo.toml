@@ -23,7 +23,7 @@ features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_UI_Input_
 # 어려워 COM 인터페이스는 상위 크레이트 `windows`로 감싼다 (ABI 동일, 공존 OK).
 [target.'cfg(windows)'.dependencies.windows]
 version = "0.60"
-features = ["Win32_Foundation", "Win32_UI_Accessibility", "Win32_System_Com"]
+features = ["Win32_Foundation", "Win32_UI_Accessibility", "Win32_System_Com", "Win32_System_Ole"]
 
 [build-dependencies]
 winresource = "0.1.31"
