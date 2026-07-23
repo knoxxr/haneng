@@ -1,11 +1,12 @@
 //! hanengd — 한/영 상태 표시기 (macOS 상주 데몬).
 //!
-//! 마우스가 텍스트 입력 위에 있으면 커서 옆에 현재 상태 배지를 표시한다:
+//! 포커스된 입력 카렛 옆에 현재 상태 배지를 표시한다(마우스와 무관):
 //! 파랑 "한"(한글) / 회색 "a"(영문 소문자) / 주황 "A"(영문 + Caps Lock).
 //!
-//! - 텍스트 입력 판별: Accessibility API (요소 role). **손쉬운 사용 권한** 필요.
+//! - 카렛 위치: Accessibility API (포커스 요소의 AXBoundsForRange). **손쉬운
+//!   사용 권한** 필요 — 없거나 카렛을 못 읽으면 배지를 숨긴다.
 //! - 한/영 판별: 현재 키보드 입력 소스(TIS) 조회.
-//! - **키 입력을 관찰하거나 텍스트를 조작하지 않는다** — 커서 위치·모드만 읽는다.
+//! - **키 입력을 관찰하거나 텍스트를 조작하지 않는다** — 카렛 위치·모드만 읽는다.
 //! - 메뉴바 아이콘: 배지 토글 · 설정 · 종료.
 
 #[cfg(target_os = "macos")]
@@ -131,23 +132,15 @@ mod macos {
             badge.hide();
             return;
         }
-        let Some(pos) = mac_input::cursor_location() else {
-            badge.hide();
-            return;
-        };
-        // 트리거: 마우스가 텍스트 입력 위(hover). 위치: 포커스 요소의 카렛.
-        // 카렛을 못 읽으면 숨긴다 — 마우스 위치에는 표시하지 않는다.
-        if ax::text_input_at(pos.x, pos.y) {
-            if let Some(rect) = ax::focused_caret_bounds() {
-                badge.show_at_caret(
-                    rect.origin.x,
-                    rect.origin.y,
-                    rect.size.height,
-                    current_mode(),
-                );
-            } else {
-                badge.hide();
-            }
+        // 마우스와 무관하게 **포커스된 입력 요소의 카렛**이 있으면 그 카렛에
+        // 표시한다. 카렛이 없으면(텍스트 입력 포커스 아님) 숨긴다.
+        if let Some(rect) = ax::focused_caret_bounds() {
+            badge.show_at_caret(
+                rect.origin.x,
+                rect.origin.y,
+                rect.size.height,
+                current_mode(),
+            );
         } else {
             badge.hide();
         }

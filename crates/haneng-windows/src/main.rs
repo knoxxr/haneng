@@ -39,12 +39,8 @@ mod win {
     use haneng_core::config;
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::LazyLock;
-    use windows_sys::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
     use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetKeyState, VK_CAPITAL};
-    use windows_sys::Win32::UI::WindowsAndMessaging::{
-        CallNextHookEx, DispatchMessageW, GetMessageW, SetWindowsHookExW, MSG, WH_MOUSE_LL,
-        WM_MOUSEMOVE,
-    };
+    use windows_sys::Win32::UI::WindowsAndMessaging::{DispatchMessageW, GetMessageW, MSG};
 
     /// 트레이 토글: 배지 표시 켜기/끄기.
     pub static ENABLED: AtomicBool = AtomicBool::new(true);
@@ -108,29 +104,18 @@ mod win {
         );
 
         let alpha = (CONFIG.badge_opacity_percent() as u16 * 255 / 100) as u8;
-        indicator::init(current_mode, alpha);
-        // 트레이 아이콘은 메시지 루프가 도는 이 스레드에서 만들어야 하며,
-        // 루프가 끝날 때까지 살아 있어야 한다.
+        // 마우스와 무관하게 포커스 카렛을 따라가도록 타이머로 구동한다.
+        // init이 내부 타이머를 걸고, ENABLED로 표시 여부를 제어한다.
+        indicator::init(current_mode, &ENABLED, alpha);
+        // 트레이 아이콘은 메시지 루프가 도는 이 스레드에서 만들어야 한다.
         let _tray = crate::tray::install(&ENABLED);
 
         unsafe {
-            let mouse = SetWindowsHookExW(WH_MOUSE_LL, Some(mouse_hook), std::ptr::null_mut(), 0);
-            if mouse.is_null() {
-                eprintln!("마우스 훅 설치 실패");
-                std::process::exit(1);
-            }
-            eprintln!("hanengw 실행 중 — 입력창 위에 마우스를 올리면 한/영 상태를 표시합니다.");
+            eprintln!("hanengw 실행 중 — 입력 카렛 옆에 한/영 상태를 표시합니다.");
             let mut msg: MSG = std::mem::zeroed();
             while GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) > 0 {
                 DispatchMessageW(&msg);
             }
         }
-    }
-
-    unsafe extern "system" fn mouse_hook(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
-        if code >= 0 && wparam as u32 == WM_MOUSEMOVE && ENABLED.load(Ordering::Relaxed) {
-            indicator::on_mouse_move();
-        }
-        CallNextHookEx(std::ptr::null_mut(), code, wparam, lparam)
     }
 }
