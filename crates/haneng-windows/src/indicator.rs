@@ -14,7 +14,7 @@
 //! - 끄기: 트레이 토글(ENABLED) 또는 config.txt `hover_indicator = off`.
 
 use std::mem::{size_of, zeroed};
-use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, AtomicU8, AtomicUsize, Ordering};
 use std::sync::OnceLock;
 use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
 use windows_sys::Win32::Graphics::Gdi::{
@@ -52,10 +52,20 @@ impl Mode {
 static INDICATOR_HWND: AtomicUsize = AtomicUsize::new(0);
 static VISIBLE: AtomicBool = AtomicBool::new(false);
 static MODE: AtomicU8 = AtomicU8::new(0);
+/// 폴링 틱 카운터 — 숨김 상태에서 절반 주기로 건너뛰는 데 쓴다.
+static TICK: AtomicU32 = AtomicU32::new(0);
+/// 마지막으로 배지를 놓은 화면 좌표 — 안 바뀌었으면 SetWindowPos를 생략한다.
+static LAST_X: AtomicI32 = AtomicI32::new(i32::MIN);
+static LAST_Y: AtomicI32 = AtomicI32::new(i32::MIN);
 /// 현재 입력 상태를 알려주는 콜백 (init에서 설정).
 static MODE_SOURCE: OnceLock<fn() -> Mode> = OnceLock::new();
 /// 배지 표시 활성화 여부 (트레이 토글 — init에서 설정).
 static ENABLED_SRC: OnceLock<&'static AtomicBool> = OnceLock::new();
+/// 현재 불투명도(layered 알파, 0~255)를 알려주는 콜백 — 설정 파일을 다시 읽어
+/// 실행 중에도 조절이 반영되게 한다 (init에서 설정).
+static ALPHA_SOURCE: OnceLock<fn() -> u8> = OnceLock::new();
+/// 마지막으로 창에 적용한 알파 — 안 바뀌었으면 재적용을 생략한다.
+static APPLIED_ALPHA: AtomicU8 = AtomicU8::new(255);
 
 /// 배지 한 변 크기(px)와 카렛과의 간격.
 const BADGE_SIZE: i32 = 22;
@@ -70,10 +80,12 @@ fn wide(s: &str) -> Vec<u16> {
 }
 
 /// 배지 창 생성 + 갱신 타이머 시작 (메시지 루프 스레드에서 한 번 호출).
-/// `alpha`는 창 불투명도 (0=완전 투명, 255=불투명).
-pub fn init(mode_source: fn() -> Mode, enabled: &'static AtomicBool, alpha: u8) {
+/// `alpha_source`는 창 불투명도(0=완전 투명, 255=불투명)를 돌려주는 콜백 —
+/// 타이머가 주기적으로 다시 호출해 설정 변경을 실행 중에도 반영한다.
+pub fn init(mode_source: fn() -> Mode, enabled: &'static AtomicBool, alpha_source: fn() -> u8) {
     let _ = MODE_SOURCE.set(mode_source);
     let _ = ENABLED_SRC.set(enabled);
+    let _ = ALPHA_SOURCE.set(alpha_source);
     unsafe {
         let hinstance = GetModuleHandleW(std::ptr::null());
         let class_name = wide("haneng-indicator");
@@ -101,7 +113,9 @@ pub fn init(mode_source: fn() -> Mode, enabled: &'static AtomicBool, alpha: u8) 
         if hwnd.is_null() {
             return;
         }
+        let alpha = alpha_source();
         SetLayeredWindowAttributes(hwnd, 0, alpha, LWA_ALPHA);
+        APPLIED_ALPHA.store(alpha, Ordering::Relaxed);
         INDICATOR_HWND.store(hwnd as usize, Ordering::Release);
         // 마우스와 무관하게 카렛을 따라가도록 상시 타이머를 건다.
         SetTimer(hwnd, REFRESH_TIMER_ID, REFRESH_MS, None);
@@ -153,6 +167,13 @@ unsafe fn place_badge(hwnd: HWND) -> bool {
     };
     let x = left.clamp(mon_left, (mon_right - BADGE_SIZE).max(mon_left));
     let y = y.clamp(mon_top, (mon_bottom - BADGE_SIZE).max(mon_top));
+    // 위치가 그대로고 이미 보이는 중이면 SetWindowPos 생략 (카렛이 멈춰 있을 때
+    // 매 틱 창 이동 호출을 없앤다). 숨김→표시 전환 땐 반드시 호출해야 하므로
+    // VISIBLE도 함께 확인한다.
+    let same_pos = LAST_X.swap(x, Ordering::Relaxed) == x && LAST_Y.swap(y, Ordering::Relaxed) == y;
+    if same_pos && VISIBLE.load(Ordering::Relaxed) {
+        return true;
+    }
     SetWindowPos(
         hwnd,
         HWND_TOPMOST,
@@ -163,6 +184,19 @@ unsafe fn place_badge(hwnd: HWND) -> bool {
         SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW,
     );
     true
+}
+
+/// 설정에서 불투명도를 다시 읽어 바뀌었으면 layered 알파를 갱신한다.
+/// 설정 창에서 조절하면 데몬 재시작 없이 반영된다. 숨김 상태에서도 적용해
+/// 다음 표시 때 새 값이 쓰이도록 한다.
+unsafe fn refresh_alpha(hwnd: HWND) {
+    let Some(src) = ALPHA_SOURCE.get() else {
+        return;
+    };
+    let alpha = src();
+    if APPLIED_ALPHA.swap(alpha, Ordering::Relaxed) != alpha {
+        SetLayeredWindowAttributes(hwnd, 0, alpha, LWA_ALPHA);
+    }
 }
 
 /// 배지를 숨긴다. (타이머는 상시 유지 — 끄지 않는다.)
@@ -185,14 +219,26 @@ unsafe extern "system" fn wnd_proc(
             .get()
             .map(|e| e.load(Ordering::Relaxed))
             .unwrap_or(true);
-        if enabled {
-            refresh_mode(hwnd);
-            if place_badge(hwnd) {
-                if !VISIBLE.swap(true, Ordering::Relaxed) {
-                    InvalidateRect(hwnd, std::ptr::null(), 1);
-                }
-            } else {
-                hide(hwnd);
+        if !enabled {
+            hide(hwnd);
+            return 0;
+        }
+        // 약 2초마다 설정 파일의 불투명도를 다시 읽어 반영한다 (재시작 불필요).
+        // 숨김 상태에서도 돌아야 하므로 아래 유휴 스킵보다 앞에 둔다.
+        if TICK.load(Ordering::Relaxed) % 13 == 0 {
+            refresh_alpha(hwnd);
+        }
+        // 숨김(유휴) 상태에서는 절반 주기(≈300ms)로만 조회한다. 카렛이 없을 때
+        // 매 틱 포그라운드 IME 질의(SendMessageTimeout)와 UIA 체인을 도는 비용을
+        // 줄인다. 표시 중일 땐 150ms를 유지해 카렛을 부드럽게 따라간다.
+        let tick = TICK.fetch_add(1, Ordering::Relaxed);
+        if !VISIBLE.load(Ordering::Relaxed) && tick % 2 == 1 {
+            return 0;
+        }
+        refresh_mode(hwnd);
+        if place_badge(hwnd) {
+            if !VISIBLE.swap(true, Ordering::Relaxed) {
+                InvalidateRect(hwnd, std::ptr::null(), 1);
             }
         } else {
             hide(hwnd);

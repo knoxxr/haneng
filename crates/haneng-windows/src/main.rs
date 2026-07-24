@@ -73,6 +73,14 @@ mod win {
         }
     }
 
+    /// 배지 불투명도(layered 알파, 0~255). 설정 파일을 매번 다시 읽어
+    /// 설정 창에서 조절한 값이 재시작 없이 반영되게 한다 (타이머가 주기적으로
+    /// 호출). 시작 시 캐시한 CONFIG를 쓰지 않는 이유 — 그건 변경을 못 본다.
+    fn current_alpha() -> u8 {
+        let pct = config::load_config().badge_opacity_percent();
+        (pct as u16 * 255 / 100) as u8
+    }
+
     /// 데몬은 하나만 — 네임드 뮤텍스로 중복 실행을 막는다.
     /// 이미 실행 중이면 false (호출자 즉시 종료). 뮤텍스 핸들은 프로세스가
     /// 끝날 때까지 유지되도록 닫지 않는다.
@@ -103,10 +111,10 @@ mod win {
             Ordering::Relaxed,
         );
 
-        let alpha = (CONFIG.badge_opacity_percent() as u16 * 255 / 100) as u8;
         // 마우스와 무관하게 포커스 카렛을 따라가도록 타이머로 구동한다.
         // init이 내부 타이머를 걸고, ENABLED로 표시 여부를 제어한다.
-        indicator::init(current_mode, &ENABLED, alpha);
+        // 불투명도는 콜백으로 넘겨 타이머가 주기적으로 다시 읽는다.
+        indicator::init(current_mode, &ENABLED, current_alpha);
         // 트레이 아이콘은 메시지 루프가 도는 이 스레드에서 만들어야 한다.
         let _tray = crate::tray::install(&ENABLED);
 

@@ -146,12 +146,21 @@ impl SettingsApp {
             .set_extra("badge_opacity", &self.opacity.to_string());
         let result = config::save_config(&self.config);
         self.status = match result {
-            Ok(()) => format!(
-                "저장됨: {} — 데몬을 재시작하면 적용됩니다.",
-                config::config_dir()
-                    .map(|d| d.display().to_string())
-                    .unwrap_or_default()
-            ),
+            Ok(()) => {
+                // Windows 데몬은 불투명도를 실행 중 다시 읽어 반영한다(재시작 불필요).
+                // 나머지 설정과 다른 OS는 아직 재시작이 필요하다.
+                let note = if cfg!(target_os = "windows") {
+                    "불투명도는 곧 반영되고, 나머지는 데몬 재시작 시 적용됩니다."
+                } else {
+                    "데몬을 재시작하면 적용됩니다."
+                };
+                format!(
+                    "저장됨: {} — {note}",
+                    config::config_dir()
+                        .map(|d| d.display().to_string())
+                        .unwrap_or_default()
+                )
+            }
             Err(e) => format!("저장 실패: {e}"),
         };
     }

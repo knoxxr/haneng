@@ -148,6 +148,20 @@ unsafe fn caret_via_uia() -> Option<(i32, i32, i32)> {
         let uia = slot.as_ref()?;
 
         let element = uia.GetFocusedElement().ok()?;
+        // GetFocusedElement는 시스템 전역이라, 다른 앱으로 전환해도(예: 크롬에서
+        // Alt+Tab) 직전 텍스트 필드를 계속 돌려준다 → 배지가 남는다. Win32 카렛
+        // 경로는 포그라운드 기준이라 저절로 숨지만 이 폴백은 그렇지 않으므로,
+        // 포커스 요소가 포그라운드 창과 같은 프로세스가 아니면 포커스를 잃은
+        // 것으로 보고 숨긴다.
+        let foreground = GetForegroundWindow();
+        if foreground.is_null() {
+            return None;
+        }
+        let mut fg_pid: u32 = 0;
+        GetWindowThreadProcessId(foreground, &mut fg_pid);
+        if element.CurrentProcessId().ok()? as u32 != fg_pid {
+            return None;
+        }
         // 편집 가능한 텍스트 필드에서만 배지를 띄운다. 편집 컨트롤(Edit)이나
         // 리치 편집기(Document)만 허용 — 일반 웹 페이지의 단순 텍스트 선택에서
         // 배지가 뜨는 오탐을 줄인다.
