@@ -5,6 +5,8 @@
 
 ## [Unreleased]
 
+## [0.8.7] - 2026-07-24
+
 ### Fixed
 - Windows: 크롬·Electron 등 UIA 폴백 경로에서 그 앱을 떠나 다른 창으로 전환해도
   (Alt+Tab 등) 직전 텍스트 필드에 배지가 남던 문제 — `GetFocusedElement`가 시스템
