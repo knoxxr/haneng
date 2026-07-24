@@ -5,6 +5,8 @@
 
 ## [Unreleased]
 
+## [0.8.8] - 2026-07-24
+
 ### Fixed
 - Windows: **입력 불가한 입력창**(비활성·읽기 전용)에는 배지를 표시하지 않는다.
   Win32 경로는 `IsWindowEnabled`·`ES_READONLY` 스타일로, UIA 폴백은
