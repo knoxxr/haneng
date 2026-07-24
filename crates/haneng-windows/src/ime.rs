@@ -7,9 +7,10 @@ use std::mem::{size_of, zeroed};
 use windows_sys::Win32::Foundation::POINT;
 use windows_sys::Win32::Graphics::Gdi::ClientToScreen;
 use windows_sys::Win32::UI::Input::Ime::ImmGetDefaultIMEWnd;
+use windows_sys::Win32::UI::Input::KeyboardAndMouse::IsWindowEnabled;
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    GetForegroundWindow, GetGUIThreadInfo, GetWindowThreadProcessId, SendMessageTimeoutW,
-    GUITHREADINFO, SMTO_ABORTIFHUNG, WM_IME_CONTROL,
+    GetForegroundWindow, GetGUIThreadInfo, GetWindowLongW, GetWindowThreadProcessId,
+    SendMessageTimeoutW, ES_READONLY, GUITHREADINFO, GWL_STYLE, SMTO_ABORTIFHUNG, WM_IME_CONTROL,
 };
 
 /// IME 열림 상태(한글 IME에서 = 한글 모드 여부).
@@ -81,6 +82,14 @@ fn caret_via_win32() -> Option<(i32, i32, i32)> {
         if GetGUIThreadInfo(thread, &mut info) == 0 || info.hwndCaret.is_null() {
             return None;
         }
+        // 입력 불가한 컨트롤엔 표시하지 않는다: 비활성(disabled)이거나 읽기 전용
+        // (ES_READONLY)이면 숨긴다. 카렛을 소유한 창은 거의 항상 Edit/RichEdit라
+        // 이 스타일 비트로 읽기 전용을 판별할 수 있다.
+        if IsWindowEnabled(info.hwndCaret) == 0
+            || GetWindowLongW(info.hwndCaret, GWL_STYLE) & ES_READONLY != 0
+        {
+            return None;
+        }
         let r = info.rcCaret;
         // 높이 0이면 실제 카렛이 아니다 (질의 실패·스텁 값).
         if r.bottom <= r.top {
@@ -115,7 +124,8 @@ use windows::Win32::System::Ole::{
 };
 use windows::Win32::UI::Accessibility::{
     CUIAutomation, IUIAutomation, IUIAutomationTextPattern, IUIAutomationTextRange,
-    TextUnit_Character, UIA_DocumentControlTypeId, UIA_EditControlTypeId, UIA_TextPatternId,
+    IUIAutomationValuePattern, TextUnit_Character, UIA_DocumentControlTypeId,
+    UIA_EditControlTypeId, UIA_TextPatternId, UIA_ValuePatternId,
 };
 
 thread_local! {
@@ -168,6 +178,20 @@ unsafe fn caret_via_uia() -> Option<(i32, i32, i32)> {
         let ctype = element.CurrentControlType().ok()?;
         if ctype != UIA_EditControlTypeId && ctype != UIA_DocumentControlTypeId {
             return None;
+        }
+        // 입력 불가한 필드엔 표시하지 않는다: 비활성(disabled)이거나, ValuePattern이
+        // 읽기 전용을 보고하면 숨긴다. 클릭이 편집 불가 영역으로 옮겨가면(예: 웹
+        // 페이지의 읽기 전용 본문) 여기서 걸러진다. ValuePattern 미지원 요소(일부
+        // 리치 편집기)는 편집 가능으로 간주해 통과시킨다.
+        if !element.CurrentIsEnabled().ok()?.as_bool() {
+            return None;
+        }
+        if let Ok(unknown) = element.GetCurrentPattern(UIA_ValuePatternId) {
+            if let Ok(value) = unknown.cast::<IUIAutomationValuePattern>() {
+                if value.CurrentIsReadOnly().map(|b| b.as_bool()).unwrap_or(false) {
+                    return None;
+                }
+            }
         }
         // 텍스트 패턴 미지원이면 GetCurrentPattern이 널 → from_abi가 Err 처리.
         let pattern: IUIAutomationTextPattern = element
